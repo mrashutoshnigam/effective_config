@@ -10,6 +10,8 @@ export interface ProjectInfo {
   dir: string;
   /** Absolute path of the project file (`.csproj`). */
   projectFile: string;
+  /** Kind of project; optional until all hosts set it. */
+  kind?: 'dotnet' | 'python';
 }
 
 /** The profile/environment the user chose to simulate. */
