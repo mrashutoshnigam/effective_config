@@ -12,7 +12,65 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [],
-  "contributes": {},
+  "contributes": {
+    "commands": [
+      {
+        "command": "effectiveConfig.show",
+        "title": "Effective Config: Show Merged Configuration",
+        "icon": "$(list-tree)"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "effectiveConfig.show",
+          "when": "resourceFilename =~ /^appsettings.*\\.json$/i || resourceExtname == .csproj"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "effectiveConfig.show",
+          "when": "resourceFilename =~ /^appsettings.*\\.json$/i",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "effectiveConfig.show"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Effective Config Viewer",
+      "properties": {
+        "effectiveConfig.dotnet.jsonLayers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "appsettings.json",
+            "appsettings.{env}.json",
+            "appsettings.secrets.json"
+          ],
+          "description": "JSON configuration layers, lowest priority first. {env} is replaced by the selected environment."
+        },
+        "effectiveConfig.maskPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "*Password*",
+            "*Secret*",
+            "*Key*",
+            "ConnectionStrings:*"
+          ],
+          "description": "Case-insensitive glob patterns of keys whose values are masked by default (* matches any characters, including ':')."
+        }
+      }
+    }
+  },
   "scripts": {
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
