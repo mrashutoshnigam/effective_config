@@ -101,3 +101,24 @@ export async function findPythonProjects(
   const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
   return projects.sort((a, b) => cmp(a.name.toLowerCase(), b.name.toLowerCase()) || cmp(norm(a.dir), norm(b.dir)));
 }
+
+/**
+ * Drops root-fallback Python projects (no marker file, `.env` at a workspace root) whose root already
+ * contains a .NET project at or under it, so a .NET repo with a stray `.env` gets no bogus Python project.
+ * @param python Discovered Python projects.
+ * @param dotnet Discovered .NET projects.
+ * @param workspaceRoots Absolute workspace folder paths.
+ * @returns The Python projects without those fallback projects; marker-based projects are always kept.
+ */
+export function dropFallbackInDotnetRoots(
+  python: ProjectInfo[],
+  dotnet: ProjectInfo[],
+  workspaceRoots: string[],
+): ProjectInfo[] {
+  const roots = new Set(workspaceRoots.map(norm));
+  return python.filter((p) => {
+    const dir = norm(p.dir);
+    const isFallback = roots.has(dir) && basename(p.projectFile).toLowerCase() === '.env';
+    return !(isFallback && dotnet.some((d) => norm(d.dir) === dir || norm(d.dir).startsWith(dir + '/')));
+  });
+}

@@ -9,7 +9,7 @@ Add a Python provider beside the .NET one. Same command, same panel, same engine
 ## Projects
 
 - A Python project = a folder containing `.env` or any `.env.*` file AND one marker: `pyproject.toml`, `requirements.txt`, `setup.py`, `setup.cfg`, `Pipfile`.
-- Fallback: when no marker-based project exists in a workspace folder whose root has a `.env`, that root is a Python project.
+- Fallback: when no marker-based project exists in a workspace folder whose root has a `.env`, that root is a Python project, unless the root already contains a .NET project at or under it (a .NET repo with a stray `.env`, e.g. for docker-compose, gets no `[Python]` project).
 - Ignored folders: `node_modules`, `.venv`, `venv`, `env`, `__pycache__`, `site-packages`, `.git`, `bin`, `obj`.
 - Project switcher lists .NET and Python projects together, tagged `[.NET]` / `[Python]`.
 - Opened from: Command Palette, Explorer context menu and editor-title button on `.env` / `.env.*` files (plus existing .NET triggers). A file owned by both a .NET and a Python project (same folder) goes to the provider matching the file type.

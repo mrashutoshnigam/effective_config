@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { nodeFileSystem } from './dotnet/fileSystem';
 import { findOwningProject } from './dotnet/projectDiscovery';
-import { findPythonProjects } from './python/projectDiscovery';
+import { dropFallbackInDotnetRoots, findPythonProjects } from './python/projectDiscovery';
 import type { ProjectInfo } from './provider';
 import { ConfigPanel } from './panel/ConfigPanel';
 import type { ViewState, WebviewMessage } from './panel/messages';
@@ -71,8 +71,18 @@ async function discoverPythonProjects(): Promise<ProjectInfo[]> {
  * @returns All projects, sorted by name and then kind.
  */
 async function discoverProjects(): Promise<ProjectInfo[]> {
-  const [dotnet, python] = await Promise.all([discoverDotnetProjects(), discoverPythonProjects()]);
-  return [...dotnet, ...python].sort((a, b) => a.name.localeCompare(b.name) || a.kind.localeCompare(b.kind));
+  const [dotnet, python] = await Promise.all([
+    discoverDotnetProjects().catch((err: unknown) => {
+      console.error('Effective Config: .NET project discovery failed', err);
+      return [] as ProjectInfo[];
+    }),
+    discoverPythonProjects().catch((err: unknown) => {
+      console.error('Effective Config: Python project discovery failed', err);
+      return [] as ProjectInfo[];
+    }),
+  ]);
+  const roots = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+  return [...dotnet, ...dropFallbackInDotnetRoots(python, dotnet, roots)].sort((a, b) => a.name.localeCompare(b.name) || a.kind.localeCompare(b.kind));
 }
 
 /** Label of a project in the project picker, tagged by kind. */

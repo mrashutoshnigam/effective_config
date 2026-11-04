@@ -32,7 +32,7 @@ describe('findOwningProject', () => {
     expect(findOwningProject('/r/a.json', [])).toBeUndefined();
   });
 
-  it('same-folder .NET and Python projects — .env prefers python, appsettings prefers dotnet', () => {
+  it('same-folder .NET and Python projects â€” .env prefers python, appsettings prefers dotnet', () => {
     const projects = [P('/r/app', 'dotnet'), P('/r/app', 'python')];
     expect(findOwningProject('/r/app/.env', projects, 'python')?.kind).toBe('python');
     expect(findOwningProject('/r/app/appsettings.json', projects, 'dotnet')?.kind).toBe('dotnet');

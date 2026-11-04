@@ -216,10 +216,18 @@ describe('Effective Config panel (integration)', () => {
     assert.ok(find(s.root, 'FEATURE_FLAGS:BETA'), 'nested key from __ delimiter exists');
   });
 
-  it('copy env var name on a python key uses the __ separator — clipboard is LOG__LEVEL', async () => {
-    await openAndGetState(api, fixture('PyApp/.env'), (x) => x.projectId === fixture('PyApp/pyproject.toml'));
-    await api.sendMessage({ type: 'copy', path: 'LOG:LEVEL', what: 'envVarName' });
-    assert.strictEqual(await vscode.env.clipboard.readText(), 'LOG__LEVEL');
+  it('copy env var name on a python key uses the configured delimiter — nestedDelimiter "_" copies DB_HOST for DB:HOST', async () => {
+    const config = vscode.workspace.getConfiguration('effectiveConfig');
+    const previous = config.inspect<string>('python.nestedDelimiter')?.workspaceValue;
+    try {
+      await config.update('python.nestedDelimiter', '_', vscode.ConfigurationTarget.Workspace);
+      await openAndGetState(api, fixture('PyApp/.env'), (x) => x.projectId === fixture('PyApp/pyproject.toml'));
+      await api.sendMessage({ type: 'copy', path: 'DB:HOST', what: 'envVarName' });
+      assert.strictEqual(await vscode.env.clipboard.readText(), 'DB_HOST');
+    } finally {
+      await vscode.workspace.getConfiguration('effectiveConfig').update('python.nestedDelimiter', previous, vscode.ConfigurationTarget.Workspace);
+      fs.rmSync(fixture('.vscode'), { recursive: true, force: true });
+    }
   });
 
   it('Mixed folder — .env opens the python project and appsettings.json opens the dotnet project', async () => {

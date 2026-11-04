@@ -284,7 +284,7 @@ describe('render', () => {
     expect(post).toHaveBeenCalledWith({ type: 'select', projectId: 'p2' });
   });
 
-  it("project options show kind tag — '[Python] PyApp' and '[.NET] Api'", () => {
+  it("project options show kind tag â€” '[Python] PyApp' and '[.NET] Api'", () => {
     const { el } = setup(
       makeState([], {
         projects: [

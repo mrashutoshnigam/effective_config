@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { FileSystem } from '../../src/dotnet/fileSystem';
-import { findPythonProjects, IGNORED_FOLDERS, PYTHON_MARKERS } from '../../src/python/projectDiscovery';
+import type { ProjectInfo } from '../../src/provider';
+import { dropFallbackInDotnetRoots, findPythonProjects, IGNORED_FOLDERS, PYTHON_MARKERS } from '../../src/python/projectDiscovery';
 
 /** Builds a fake file system from a directory -> entries map. */
 function fakeFs(dirs: Record<string, string[]>): FileSystem {
@@ -84,5 +85,38 @@ describe('findPythonProjects', () => {
     const fs = fakeFs({ '/ws': ['.env'], '/ws/inner': ['.env'] });
     expect((await findPythonProjects([], ['/ws', '/ws/inner'], fs)).map((p) => p.dir)).toEqual(['/ws/inner', '/ws']);
     expect((await findPythonProjects([], ['/ws/inner', '/ws'], fs)).map((p) => p.dir)).toEqual(['/ws/inner', '/ws']);
+  });
+});
+
+describe('dropFallbackInDotnetRoots', () => {
+  const py = (dir: string, file: string): ProjectInfo => ({ id: file, name: 'x', dir, projectFile: file, kind: 'python' });
+  const net = (dir: string): ProjectInfo => ({ id: `${dir}/a.csproj`, name: 'a', dir, projectFile: `${dir}/a.csproj`, kind: 'dotnet' });
+
+  it('drops the root fallback project when a .NET project lives under that root — result is empty', () => {
+    expect(dropFallbackInDotnetRoots([py('/ws', '/ws/.env')], [net('/ws/src/Api')], ['/ws'])).toEqual([]);
+  });
+
+  it('drops the fallback when the .NET project sits at the root itself, with Windows paths and case differences', () => {
+    expect(dropFallbackInDotnetRoots([py('C:\\WS', 'C:\\WS\\.env')], [net('c:/ws')], ['c:/ws'])).toEqual([]);
+  });
+
+  it('keeps the fallback project when no .NET project is under its root — one project remains', () => {
+    const p = py('/ws', '/ws/.env');
+    expect(dropFallbackInDotnetRoots([p], [net('/other/Api')], ['/ws'])).toEqual([p]);
+  });
+
+  it('keeps marker-based Python projects even when a .NET project shares the root — project preserved', () => {
+    const p = py('/ws/app', '/ws/app/pyproject.toml');
+    expect(dropFallbackInDotnetRoots([p], [net('/ws/app')], ['/ws'])).toEqual([p]);
+  });
+
+  it('keeps a root fallback in a different workspace root than the .NET project — only the matching root is dropped', () => {
+    const keep = py('/b', '/b/.env');
+    expect(dropFallbackInDotnetRoots([py('/a', '/a/.env'), keep], [net('/a/Api')], ['/a', '/b'])).toEqual([keep]);
+  });
+
+  it('does not treat a sibling folder sharing a name prefix as under the root — fallback kept', () => {
+    const p = py('/ws', '/ws/.env');
+    expect(dropFallbackInDotnetRoots([p], [net('/ws2/Api')], ['/ws'])).toEqual([p]);
   });
 });

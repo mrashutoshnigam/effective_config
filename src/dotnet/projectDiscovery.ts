@@ -8,8 +8,8 @@ function norm(p: string): string {
 /**
  * Finds the project owning a file: the one with the deepest directory containing it.
  * Paths are compared case-insensitively with `\` and `/` treated alike.
- * @param filePath Absolute path of the file.
  * When several projects share the deepest directory, the first one of `preferredKind` wins, else the first one.
+ * @param filePath Absolute path of the file.
  * @param projects Candidate projects.
  * @param preferredKind Kind preferred when projects tie on directory depth.
  * @returns The owning project, or undefined when none contains the file.
