@@ -125,6 +125,10 @@ export class ConfigPanel {
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: false, localResourceRoots: [distUri] },
     );
+    this.panel.iconPath = {
+      light: vscode.Uri.joinPath(context.extensionUri, 'media', 'panel-light.svg'),
+      dark: vscode.Uri.joinPath(context.extensionUri, 'media', 'panel-dark.svg'),
+    };
     this.panel.webview.html = this.buildHtml(distUri);
     this.panel.webview.onDidReceiveMessage((message: unknown) => {
       if (!isWebviewMessage(message)) {

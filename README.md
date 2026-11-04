@@ -2,6 +2,55 @@
 
 Shows the **final merged configuration** a .NET app would see for a chosen environment, as a hierarchy, with the source of every value.
 
+## Getting started
+
+Prerequisites: Node.js 20+ and VS Code 1.85+.
+
+```bash
+npm install
+npm run build
+```
+
+### Run from source (F5)
+
+1. Open this folder in VS Code.
+2. Press **F5** (Run and Debug → **Run Extension (sample projects)**). It builds the extension and opens an Extension Development Host on `test/fixtures`.
+   Use **Run Extension (pick a folder)** to open your own .NET solution instead.
+3. In the new window, open the panel (see below).
+
+Without the debugger:
+
+```bash
+code --extensionDevelopmentPath="<path to this repo>" "<path to your .NET solution>"
+```
+
+### Install as a normal extension
+
+```bash
+npx vsce package --allow-missing-repository
+code --install-extension effective-config-0.1.0.vsix
+```
+
+Reload VS Code; the extension is then available in every workspace.
+
+### Open the panel
+
+- Command Palette (`Ctrl+Shift+P`): **Effective Config: Show Merged Configuration**
+- Explorer: right-click an `appsettings*.json` or `.csproj` file
+- Editor title button while an `appsettings*.json` file is open
+
+Pick the project, launch profile and environment at the top of the panel. Click the eye button to reveal a masked value; click a source label to jump to the line that set it.
+
+### Run the tests
+
+```bash
+npm run lint
+npm run test:unit
+npm run test:integration
+```
+
+Integration tests launch the locally installed VS Code (set `VSCODE_EXECUTABLE_PATH` to use a different build).
+
 ## What it does
 
 - Opens a webview panel in an editor tab for one .NET project (a `.csproj` directory containing `appsettings.json`), with a project switcher.

@@ -16,3 +16,4 @@ package-lock.json
 .claude/**
 graphify-out/**
 .vscode-test.mjs
+media/icon.svg

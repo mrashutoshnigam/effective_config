@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Source for media/icon.png: three stacked config layers with a tree on the top (merged) sheet. -->
+  <rect width="128" height="128" rx="24" fill="#1F4E8C"/>
+  <rect x="44" y="18" width="62" height="74" rx="8" fill="#7FB2F0"/>
+  <rect x="34" y="28" width="62" height="74" rx="8" fill="#B9D6F8"/>
+  <rect x="24" y="38" width="62" height="74" rx="8" fill="#FFFFFF"/>
+  <g stroke="#0EA5A0" stroke-width="5" stroke-linecap="round" fill="none">
+    <path d="M38 59V96M38 74H52M38 96H52"/>
+  </g>
+  <circle cx="38" cy="54" r="6" fill="#0EA5A0"/>
+  <rect x="49" y="50" width="29" height="8" rx="4" fill="#1F4E8C"/>
+  <rect x="56" y="70" width="22" height="8" rx="4" fill="#0EA5A0"/>
+  <rect x="56" y="92" width="22" height="8" rx="4" fill="#F59E0B"/>
+</svg>

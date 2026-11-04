@@ -4,6 +4,7 @@
   "description": "Shows the merged .NET appsettings configuration for a chosen environment.",
   "version": "0.1.0",
   "private": true,
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
