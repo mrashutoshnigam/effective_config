@@ -70,3 +70,13 @@ export function keyToEnvVarName(key: string): string {
 export function splitKey(key: string): string[] {
   return key.split(':');
 }
+
+/**
+ * Tells whether a key segment is numeric by .NET's rules (int32: optional sign, digits only, in range),
+ * which is what makes a configuration section an array.
+ * @param segment Key segment.
+ * @returns True when the segment parses as an int32.
+ */
+export function isNumericSegment(segment: string): boolean {
+  return tryParseInt32(segment) !== undefined;
+}

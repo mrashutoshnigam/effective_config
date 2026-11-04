@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeKey, compareKeys, envVarNameToKey, keyToEnvVarName, splitKey } from '../../src/engine/keys';
+import { normalizeKey, compareKeys, envVarNameToKey, keyToEnvVarName, splitKey, isNumericSegment } from '../../src/engine/keys';
 
 describe('keys', () => {
   it('envVarNameToKey converts "__" to ":" — Logging__LogLevel__Default becomes Logging:LogLevel:Default', () => {
@@ -68,5 +68,15 @@ describe('keys', () => {
   it('compareKeys uses upper-case ordinal-ignore-case — "_" sorts after "a"', () => {
     expect(compareKeys('_', 'a')).toBeGreaterThan(0);
     expect(compareKeys('a', '_')).toBeLessThan(0);
+  });
+});
+
+describe('isNumericSegment', () => {
+  it('accepts int32 digits with optional sign — 0, 10, -1, +2 are numeric', () => {
+    expect(['0', '10', '-1', '+2'].map(isNumericSegment)).toEqual([true, true, true, true]);
+  });
+
+  it('rejects names, empty and out-of-int32-range values — a, "", 2147483648 are not numeric', () => {
+    expect(['a', '', '2147483648', '1.5'].map(isNumericSegment)).toEqual([false, false, false, false]);
   });
 });
