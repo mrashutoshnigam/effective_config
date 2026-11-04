@@ -1,0 +1,18 @@
+{
+  "profiles": {
+    "WebApp": {
+      "commandName": "Project",
+      "commandLineArgs": "--Feature:Enabled=true",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Logging__LogLevel__Default": "Trace"
+      }
+    },
+    "Staging": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Staging"
+      }
+    }
+  }
+}
