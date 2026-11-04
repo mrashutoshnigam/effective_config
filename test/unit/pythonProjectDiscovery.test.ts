@@ -70,4 +70,19 @@ describe('findPythonProjects', () => {
     const r = await findPythonProjects(['C:\\ws\\app\\Pipfile'], ['C:\\ws'], fs);
     expect(r).toEqual([{ id: 'C:\\ws\\app\\Pipfile', name: 'app', dir: 'C:\\ws\\app', projectFile: 'C:\\ws\\app\\Pipfile', kind: 'python' }]);
   });
+  it('workspace root living under an ignored-named folder is still discovered; ignored folders below it are dropped', async () => {
+    const fs = fakeFs({ '/work/env/app': ['setup.py', '.env'], '/work/env/app/.venv/x': ['setup.py', '.env'] });
+    const r = await findPythonProjects(['/work/env/app/setup.py', '/work/env/app/.venv/x/setup.py'], ['/work/env/app'], fs);
+    expect(r.map((p) => p.dir)).toEqual(['/work/env/app']);
+  });
+  it('Windows root under bin is discovered; longest containing root decides what is below it', async () => {
+    const fs = fakeFs({ 'C:\\src\\bin\\proj': ['setup.py', '.env'] });
+    const r = await findPythonProjects(['C:\\src\\bin\\proj\\setup.py'], ['C:\\SRC', 'c:/src/bin/proj'], fs);
+    expect(r.map((p) => p.name)).toEqual(['proj']);
+  });
+  it('fallback ignores fallback projects of earlier roots, so nested roots are independent of order', async () => {
+    const fs = fakeFs({ '/ws': ['.env'], '/ws/inner': ['.env'] });
+    expect((await findPythonProjects([], ['/ws', '/ws/inner'], fs)).map((p) => p.dir)).toEqual(['/ws/inner', '/ws']);
+    expect((await findPythonProjects([], ['/ws/inner', '/ws'], fs)).map((p) => p.dir)).toEqual(['/ws/inner', '/ws']);
+  });
 });

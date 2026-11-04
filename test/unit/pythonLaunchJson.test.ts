@@ -69,4 +69,14 @@ describe('parsePythonLaunchConfigs', () => {
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0].severity).toBe('error');
   });
+  it('${workspaceFolder}/.env resolves to the .env directly under the workspace root', () => {
+    const root = process.platform === 'win32' ? 'C:\\ws' : '/ws';
+    const expected = process.platform === 'win32' ? 'C:\\ws\\.env' : '/ws/.env';
+    const text = JSON.stringify({ configurations: [{ name: 'A', type: 'python', envFile: '${workspaceFolder}/.env' }] });
+    expect(parsePythonLaunchConfigs(text, FILE, root).configs[0].envFile).toBe(expected);
+  });
+  it.skipIf(process.platform !== 'win32')('${workspaceFolder}\\.env with a backslash resolves to the .env under the root on Windows', () => {
+    const text = JSON.stringify({ configurations: [{ name: 'A', type: 'python', envFile: '${workspaceFolder}\\.env' }] });
+    expect(parsePythonLaunchConfigs(text, FILE, 'C:\\ws').configs[0].envFile).toBe('C:\\ws\\.env');
+  });
 });

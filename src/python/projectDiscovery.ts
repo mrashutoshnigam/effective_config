@@ -56,7 +56,11 @@ export async function findPythonProjects(
   const byDir = new Map<string, { dir: string; markers: Map<string, string> }>();
   for (const markerPath of markerPaths) {
     const { dir, base } = splitPath(markerPath);
-    if (norm(dir).split('/').some((seg) => ignored.has(seg))) {
+    const nd = norm(dir);
+    const roots = workspaceRoots.map(norm).filter((r) => nd === r || nd.startsWith(r + '/'));
+    const root = roots.sort((a, b) => b.length - a.length)[0];
+    const below = root === undefined ? nd : nd.slice(root.length);
+    if (below.split('/').some((seg) => ignored.has(seg))) {
       continue;
     }
     const markerIndex = PYTHON_MARKERS.findIndex((m) => m.toLowerCase() === base.toLowerCase());
@@ -81,9 +85,10 @@ export async function findPythonProjects(
     }
   }
 
+  const markerProjects = [...projects];
   for (const root of workspaceRoots) {
     const r = norm(root);
-    if (projects.some((p) => norm(p.dir) === r || norm(p.dir).startsWith(r + '/'))) {
+    if (markerProjects.some((p) => norm(p.dir) === r || norm(p.dir).startsWith(r + '/'))) {
       continue;
     }
     const envName = (await fs.listDir(root)).find((n) => n.toLowerCase() === '.env');
