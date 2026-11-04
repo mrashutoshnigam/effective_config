@@ -117,8 +117,22 @@ function valueCell(node: ViewNode, post: Post): HTMLElement {
  * @param post Message poster.
  * @returns The details element.
  */
-function chain(node: ViewNode, post: Post): HTMLElement {
+function chain(node: ViewNode, ctx: BodyContext): HTMLElement {
+  const post = ctx.post;
   const details = el('details', 'chain');
+  const open = (ctx.ui.openChains ??= new Set<string>());
+  details.open = open.has(node.path);
+  details.addEventListener('toggle', () => {
+    if (details.open === open.has(node.path)) {
+      return;
+    }
+    if (details.open) {
+      open.add(node.path);
+    } else {
+      open.delete(node.path);
+    }
+    ctx.changed();
+  });
   details.append(el('summary', undefined, `${node.overridden.length} overridden`));
   const list = el('ul');
   const add = (label: string, locationId: string | undefined, text: string): void => {
@@ -144,6 +158,8 @@ function chain(node: ViewNode, post: Post): HTMLElement {
 function warning(text: string): HTMLElement {
   const w = el('span', 'warn', '⚠');
   w.title = text;
+  w.setAttribute('role', 'img');
+  w.tabIndex = 0;
   w.setAttribute('aria-label', text);
   return w;
 }
@@ -157,7 +173,7 @@ function warning(text: string): HTMLElement {
  * @param ctx Render context.
  * @returns The row element.
  */
-function row(node: ViewNode, keyText: string, depth: number, expandable: boolean | undefined, ctx: BodyContext): HTMLElement {
+function row(node: ViewNode, keyText: string, depth: number, expandable: boolean | undefined, ctx: BodyContext, searching = false): HTMLElement {
   const r = el('div', `row d${Math.min(depth, 12)}`);
   r.dataset.path = node.path;
   if (expandable !== undefined) {
@@ -165,8 +181,9 @@ function row(node: ViewNode, keyText: string, depth: number, expandable: boolean
       toggle(ctx.ui, node.path, depth);
       ctx.changed();
       ctx.rerender();
-    }, expandable ? 'Collapse' : 'Expand');
+    }, `${expandable ? 'Collapse' : 'Expand'} ${node.segment}`);
     t.className = 'toggle';
+    t.disabled = searching;
     t.setAttribute('aria-expanded', String(expandable));
     r.append(t);
   } else {
@@ -192,7 +209,7 @@ function row(node: ViewNode, keyText: string, depth: number, expandable: boolean
     actions.append(button('$', 'copy-env', () => ctx.post({ type: 'copy', path: node.path, what: 'envVarName' }), 'Copy env var name'));
     r.append(actions);
     if (node.overridden.length > 0) {
-      r.append(chain(node, ctx.post));
+      r.append(chain(node, ctx));
     }
   }
   return r;
@@ -210,7 +227,7 @@ function renderTree(body: HTMLElement, parent: ViewNode, depth: number, searchin
   for (const node of parent.children) {
     const isSection = node.children.length > 0;
     const open = isSection && isExpanded(ctx.ui, node.path, depth, searching);
-    body.append(row(node, node.segment, depth, isSection ? open : undefined, ctx));
+    body.append(row(node, node.segment, depth, isSection ? open : undefined, ctx, searching));
     if (open) {
       renderTree(body, node, depth + 1, searching, ctx);
     }
@@ -241,12 +258,12 @@ function renderFlat(body: HTMLElement, node: ViewNode, ctx: BodyContext): void {
 export function renderBody(body: HTMLElement, root: ViewNode | undefined, ctx: BodyContext): void {
   body.replaceChildren();
   if (!root || root.children.length === 0) {
-    body.append(el('div', 'empty', ctx.ui.query ? 'No matches.' : 'No configuration values.'));
+    body.append(el('div', 'empty', ctx.ui.query.trim() ? 'No matches.' : 'No configuration values.'));
     return;
   }
   if (ctx.ui.mode === 'flat') {
     renderFlat(body, root, ctx);
   } else {
-    renderTree(body, root, 1, ctx.ui.query !== '', ctx);
+    renderTree(body, root, 1, ctx.ui.query.trim() !== '', ctx);
   }
 }

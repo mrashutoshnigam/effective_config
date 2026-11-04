@@ -68,18 +68,22 @@ export function renderToolbar(state: ViewState, ui: UiState, hooks: ToolbarHooks
     'environment',
     'Environment',
     [...envs.map((x): [string, string] => [x, x]), [CUSTOM, 'Custom…']],
-    state.environment,
+    ui.customEnvOpen ? CUSTOM : state.environment,
   );
-  const custom = el('input', 'hidden');
+  const custom = el('input', ui.customEnvOpen ? '' : 'hidden');
   custom.type = 'text';
   custom.dataset.role = 'custom-env';
+  custom.value = ui.customEnvText ?? '';
   custom.placeholder = 'Environment name, Enter to apply';
   custom.setAttribute('aria-label', 'Custom environment name');
   env.addEventListener('change', () => {
     if (env.value === CUSTOM) {
+      ui.customEnvOpen = true;
       custom.classList.remove('hidden');
       custom.focus();
     } else {
+      ui.customEnvOpen = false;
+      ui.customEnvText = '';
       custom.classList.add('hidden');
       post({ type: 'select', environment: env.value });
     }
@@ -87,8 +91,20 @@ export function renderToolbar(state: ViewState, ui: UiState, hooks: ToolbarHooks
   custom.addEventListener('keydown', (e) => {
     const text = custom.value.trim();
     if (e.key === 'Enter' && text !== '') {
+      ui.customEnvOpen = false;
+      ui.customEnvText = '';
       post({ type: 'select', environment: text });
+    } else if (e.key === 'Escape') {
+      ui.customEnvOpen = false;
+      ui.customEnvText = '';
+      custom.value = '';
+      custom.classList.add('hidden');
+      env.value = state.environment;
+      env.focus();
     }
+  });
+  custom.addEventListener('input', () => {
+    ui.customEnvText = custom.value;
   });
   bar.append(env, custom);
 
@@ -105,7 +121,7 @@ export function renderToolbar(state: ViewState, ui: UiState, hooks: ToolbarHooks
   search.setAttribute('aria-label', 'Search');
   search.value = ui.query;
   search.addEventListener('input', () => {
-    ui.query = search.value.trim();
+    ui.query = search.value;
     hooks.onQueryChange();
   });
   bar.append(search);

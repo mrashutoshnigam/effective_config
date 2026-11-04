@@ -15,6 +15,7 @@ interface PersistedState {
   mode?: 'tree' | 'flat';
   query?: string;
   expanded?: string[];
+  openChains?: string[];
 }
 
 /**
@@ -22,12 +23,13 @@ interface PersistedState {
  * @param saved Value returned by `getState`.
  * @returns A valid UI state.
  */
-function restore(saved: unknown): UiState {
+export function restore(saved: unknown): UiState {
   const s = (saved ?? {}) as PersistedState;
   return {
     mode: s.mode === 'flat' ? 'flat' : 'tree',
     query: typeof s.query === 'string' ? s.query : '',
     expanded: new Set(Array.isArray(s.expanded) ? s.expanded.filter((x) => typeof x === 'string') : []),
+    openChains: new Set(Array.isArray(s.openChains) ? s.openChains.filter((x) => typeof x === 'string') : []),
   };
 }
 
@@ -42,7 +44,7 @@ export function main(): void {
   }
   const ui = restore(vscode.getState());
   const post = (m: WebviewMessage): void => vscode.postMessage(m);
-  const persist = (): void => vscode.setState({ mode: ui.mode, query: ui.query, expanded: [...ui.expanded] });
+  const persist = (): void => vscode.setState({ mode: ui.mode, query: ui.query, expanded: [...ui.expanded], openChains: [...(ui.openChains ?? [])] });
   let current: ViewState | undefined;
 
   window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
@@ -54,4 +56,6 @@ export function main(): void {
   post({ type: 'ready' });
 }
 
-main();
+if (typeof acquireVsCodeApi === 'function') {
+  main();
+}

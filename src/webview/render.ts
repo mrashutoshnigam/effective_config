@@ -1,5 +1,6 @@
 import type { ViewNode, ViewState, WebviewMessage } from '../panel/messages';
 import { el } from './dom';
+import { captureFocus } from './focus';
 import { renderToolbar } from './toolbar';
 import { renderBody } from './tree';
 
@@ -11,6 +12,12 @@ export interface UiState {
   query: string;
   /** Explicit expansion choices: `path` = expanded, `!path` = collapsed; absent = default. */
   expanded: Set<string>;
+  /** Paths whose override chain `<details>` is open; persisted. */
+  openChains?: Set<string>;
+  /** True while the custom environment input is open; transient. */
+  customEnvOpen?: boolean;
+  /** Text typed in the custom environment input; transient. */
+  customEnvText?: string;
 }
 
 /**
@@ -87,8 +94,13 @@ export function render(
   onUiChange?: () => void,
 ): void {
   const changed = (): void => onUiChange?.();
+  const restoreFocus = captureFocus(container);
   const body = el('div', 'body');
-  const rerenderBody = (): void => renderBody(body, filterViewTree(state.root, ui.query), { ui, post, rerender: rerenderBody, changed });
+  const rerenderBody = (): void => {
+    const restore = captureFocus(body);
+    renderBody(body, filterViewTree(state.root, ui.query), { ui, post, rerender: rerenderBody, changed });
+    restore();
+  };
 
   const toolbar = renderToolbar(state, ui, {
     post,
@@ -103,4 +115,5 @@ export function render(
   });
   rerenderBody();
   container.replaceChildren(toolbar, el('div', 'label', state.label), renderDiagnostics(state.diagnostics), body);
+  restoreFocus();
 }
