@@ -5,3 +5,5 @@ out/
 *.vsix
 .superpowers/
 test/fixtures/.tmp-*/
+test/fixtures/**/bin/
+test/fixtures/**/obj/
