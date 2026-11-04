@@ -57,6 +57,8 @@ export interface Contribution {
   value: string | null;
   /** Source location of the contribution, when known. */
   location?: SourceLocation;
+  /** True when the value is sensitive (secret layer or key matching a mask pattern). */
+  sensitive: boolean;
 }
 
 /** The merged result for one key: the winning contribution and those it overrode. */
@@ -69,7 +71,7 @@ export interface MergedEntry {
   winner: Contribution;
   /** Lower-priority contributions that were overridden. */
   overridden: Contribution[];
-  /** True when the value should be masked by default. */
+  /** True when any contribution (winner or overridden) is sensitive; the whole node is then masked by default. */
   sensitive: boolean;
 }
 

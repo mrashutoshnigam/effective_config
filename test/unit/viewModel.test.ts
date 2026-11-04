@@ -11,13 +11,14 @@ function M(
   sensitive = false,
   overriddenValues: string[] = [],
   location?: SourceLocation,
+  overriddenSensitive = sensitive,
 ): MergedEntry {
   return {
     key,
     value,
-    winner: { layerId, layerLabel: layerId, value, location },
-    overridden: overriddenValues.map((v) => ({ layerId: 'lower', layerLabel: 'lower', value: v, location })),
-    sensitive,
+    winner: { layerId, layerLabel: layerId, value, location, sensitive },
+    overridden: overriddenValues.map((v) => ({ layerId: 'lower', layerLabel: 'lower', value: v, location, sensitive: overriddenSensitive })),
+    sensitive: sensitive || (overriddenValues.length > 0 && overriddenSensitive),
   };
 }
 
@@ -36,6 +37,19 @@ describe('toViewModel', () => {
     expect(node.overridden).toEqual([{ layerLabel: 'lower', value: null, masked: true, locationId: undefined }]);
     const shown = toViewModel(root, new Set(['Password']), new Map()).children[0];
     expect(shown.overridden[0]).toMatchObject({ value: 'old', masked: false });
+  });
+
+  it('overridden value from secret layer masked even when winner is non-sensitive — value null', () => {
+    const root = buildTree([M('Plain', 'public', 'dev', false, ['s3cret'], undefined, true)]);
+    const node = toViewModel(root, new Set(), new Map()).children[0];
+    expect(node).toMatchObject({ masked: true, value: null });
+    expect(node.overridden[0]).toMatchObject({ value: null, masked: true });
+  });
+
+  it('opaque id prefix is applied — ids start with the given prefix', () => {
+    const locations = new Map<string, SourceLocation>();
+    toViewModel(buildTree([M('A', '1', 'a', false, [], { filePath: 'f', line: 0, column: 0 })]), new Set(), locations, 'r2');
+    expect([...locations.keys()]).toEqual(['r2l0']);
   });
 
   it('non-sensitive node shows its value and is not masked', () => {

@@ -40,6 +40,12 @@ function tokenize(input: string): string[] {
   return tokens;
 }
 
+/** Hides everything after the first `=` of a token so secrets never reach diagnostics. */
+function redact(token: string): string {
+  const eq = token.indexOf('=');
+  return eq >= 0 ? `${token.slice(0, eq)}=***` : token;
+}
+
 /**
  * Parses a command-line argument string the way the .NET command-line configuration
  * provider does for the `--key=value` and `--key value` forms (`__` in keys maps to `:`).
@@ -54,7 +60,7 @@ export function parseCommandLineArgs(args: string): CommandLineParseResult {
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     if (!token.startsWith('--') || token.length === 2 || token.startsWith('--=')) {
-      diagnostics.push({ severity: 'warning', message: `unsupported argument form: ${token}` });
+      diagnostics.push({ severity: 'warning', message: `unsupported argument form: ${redact(token)}` });
       continue;
     }
     const body = token.slice(2);
@@ -64,7 +70,7 @@ export function parseCommandLineArgs(args: string): CommandLineParseResult {
     } else if (i + 1 < tokens.length && !tokens[i + 1].startsWith('--')) {
       entries.push({ key: envVarNameToKey(body), value: tokens[++i] });
     } else {
-      diagnostics.push({ severity: 'warning', message: `missing value for argument: ${token}` });
+      diagnostics.push({ severity: 'warning', message: `missing value for argument: ${redact(token)}` });
     }
   }
   return { entries, diagnostics };

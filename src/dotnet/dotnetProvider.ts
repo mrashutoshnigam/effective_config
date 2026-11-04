@@ -51,12 +51,13 @@ export class DotnetProvider implements ConfigProvider {
     const environments = listEnvironments(files, this.options.jsonLayers);
     const { profiles } = await this.readLaunchSettings(project);
     if (profiles.length === 0) {
-      return { profiles: [], environments, defaultSelection: { environment: 'Development' } };
+      return { profiles: [], environments, profileEnvironments: {}, defaultSelection: { environment: 'Development' } };
     }
     const first = profiles[0];
     return {
       profiles: profiles.map((p) => p.name),
       environments,
+      profileEnvironments: Object.fromEntries(profiles.map((p) => [p.name, p.environmentName])),
       defaultSelection: { profile: first.name, environment: first.environmentName ?? 'Development' },
     };
   }

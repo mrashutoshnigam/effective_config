@@ -55,9 +55,11 @@ describe('mergeLayers', () => {
     expect(r[0].sensitive).toBe(true);
   });
 
-  it('marks entry not sensitive when only an overridden layer is sensitive', () => {
+  it('overridden secret-layer value makes entry sensitive — entry and that contribution flagged', () => {
     const r = mergeLayers([L('sec', { Plain: '1' }, { sensitive: true }), L('dev', { Plain: '2' })], []);
-    expect(r[0].sensitive).toBe(false);
+    expect(r[0].sensitive).toBe(true);
+    expect(r[0].overridden[0].sensitive).toBe(true);
+    expect(r[0].winner.sensitive).toBe(false);
   });
 
   it('marks entry sensitive when the key matches a mask pattern', () => {
@@ -82,7 +84,7 @@ describe('mergeLayers', () => {
       entries: [{ key: 'K', value: 'v', location }],
     };
     const r = mergeLayers([layer], []);
-    expect(r[0].winner).toEqual({ layerId: 'base', layerLabel: 'Base File', value: 'v', location });
+    expect(r[0].winner).toEqual({ layerId: 'base', layerLabel: 'Base File', value: 'v', location, sensitive: false });
     expect(r[0].overridden).toEqual([]);
   });
 

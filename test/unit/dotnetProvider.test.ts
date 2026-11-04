@@ -152,11 +152,12 @@ describe('DotnetProvider.describe', () => {
     const d = await make().describe(project('WebApp'));
     expect(d.profiles).toEqual(['WebApp', 'Staging']);
     expect(d.defaultSelection).toEqual({ profile: 'WebApp', environment: 'Development' });
+    expect(d.profileEnvironments).toEqual({ WebApp: 'Development', Staging: 'Staging' });
     expect(d.environments).toEqual(['Development', 'staging', 'Production']);
   });
 
   it('without launchSettings returns no profiles and Development — Worker', async () => {
     const d = await make().describe(project('Worker'));
-    expect(d).toEqual({ profiles: [], environments: ['Development', 'Staging', 'Production'], defaultSelection: { environment: 'Development' } });
+    expect(d).toEqual({ profiles: [], environments: ['Development', 'Staging', 'Production'], profileEnvironments: {}, defaultSelection: { environment: 'Development' } });
   });
 });

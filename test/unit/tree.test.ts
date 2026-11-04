@@ -7,7 +7,7 @@ function E(key: string, value: string | null, layerId = 'base'): MergedEntry {
   return {
     key,
     value,
-    winner: { layerId, layerLabel: layerId, value },
+    winner: { layerId, layerLabel: layerId, value, sensitive: false },
     overridden: [],
     sensitive: false,
   };

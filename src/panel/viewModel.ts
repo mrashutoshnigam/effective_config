@@ -9,16 +9,22 @@ import type { ViewNode } from './messages';
  * @param root Root of the merged tree.
  * @param revealed Paths whose sensitive values are currently revealed.
  * @param locations Output map; filled with opaque ids (`l0`, `l1`, ...) for every contribution location.
+ * @param idPrefix Prefix of the location ids (lets the host invalidate ids of earlier renders).
  * @returns The root view node.
  */
-export function toViewModel(root: ConfigNode, revealed: Set<string>, locations: Map<string, SourceLocation>): ViewNode {
+export function toViewModel(
+  root: ConfigNode,
+  revealed: Set<string>,
+  locations: Map<string, SourceLocation>,
+  idPrefix = '',
+): ViewNode {
   const revealedNorm = new Set([...revealed].map(normalizeKey));
   let next = 0;
   const register = (location: SourceLocation | undefined): string | undefined => {
     if (!location) {
       return undefined;
     }
-    const id = `l${next++}`;
+    const id = `${idPrefix}l${next++}`;
     locations.set(id, location);
     return id;
   };

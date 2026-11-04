@@ -32,11 +32,16 @@ describe('parseCommandLineArgs', () => {
     expect(r.entries.map((e) => [e.key, e.value])).toEqual([['x', '1']]);
   });
 
+  it('redacts the value of an unsupported argument — diagnostic never contains the secret', () => {
+    const r = parseCommandLineArgs('/Db:Password=hunter2');
+    expect(r.diagnostics[0].message).toBe('unsupported argument form: /Db:Password=***');
+  });
+
   it('warns "unsupported argument form" for /x=1', () => {
     const r = parseCommandLineArgs('/x=1');
     expect(r.entries).toEqual([]);
     expect(r.diagnostics[0].severity).toBe('warning');
-    expect(r.diagnostics[0].message).toBe('unsupported argument form: /x=1');
+    expect(r.diagnostics[0].message).toBe('unsupported argument form: /x=***');
   });
 
   it('returns nothing for empty or whitespace input', () => {

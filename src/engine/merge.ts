@@ -6,7 +6,6 @@ import type { Contribution, Layer, MergedEntry } from './types';
 interface Acc {
   key: string;
   contributions: Contribution[];
-  winnerSensitive: boolean;
 }
 
 /** Compares two keys segment by segment; a key that is a prefix of another sorts first. */
@@ -38,7 +37,7 @@ export function mergeLayers(layers: Layer[], maskPatterns: string[]): MergedEntr
       const norm = normalizeKey(entry.key);
       let acc = map.get(norm);
       if (!acc) {
-        acc = { key: entry.key, contributions: [], winnerSensitive: false };
+        acc = { key: entry.key, contributions: [] };
         map.set(norm, acc);
       }
       acc.contributions.push({
@@ -46,8 +45,8 @@ export function mergeLayers(layers: Layer[], maskPatterns: string[]): MergedEntr
         layerLabel: layer.label,
         value: entry.value,
         location: entry.location,
+        sensitive: layer.sensitive || isSensitiveKey(entry.key, maskPatterns),
       });
-      acc.winnerSensitive = layer.sensitive;
     }
   }
   const result: MergedEntry[] = [];
@@ -58,7 +57,7 @@ export function mergeLayers(layers: Layer[], maskPatterns: string[]): MergedEntr
       value: winner.value,
       winner,
       overridden: acc.contributions.slice(0, -1),
-      sensitive: acc.winnerSensitive || isSensitiveKey(acc.key, maskPatterns),
+      sensitive: acc.contributions.some((c) => c.sensitive),
     });
   }
   return result.sort((x, y) => compareFullKeys(x.key, y.key));

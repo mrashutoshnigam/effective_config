@@ -26,6 +26,8 @@ export interface ProjectDescription {
   profiles: string[];
   /** Available environment names. */
   environments: string[];
+  /** Environment selected by each profile (`undefined` when the profile sets none), keyed by profile name. */
+  profileEnvironments: Record<string, string | undefined>;
   /** The selection to preselect in the UI. */
   defaultSelection: Selection;
 }

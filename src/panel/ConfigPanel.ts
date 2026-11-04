@@ -1,16 +1,14 @@
 import * as os from 'node:os';
-import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import { DotnetProvider } from '../dotnet/dotnetProvider';
 import { DEFAULT_JSON_LAYERS } from '../dotnet/environments';
 import { nodeFileSystem } from '../dotnet/fileSystem';
-import { parseLaunchSettings } from '../dotnet/launchSettings';
 import { normalizeKey } from '../engine/keys';
 import { mergeLayers } from '../engine/merge';
 import { buildTree } from '../engine/tree';
 import type { Diagnostic, MergedEntry, SourceLocation } from '../engine/types';
-import type { ProjectInfo, Selection } from '../provider';
+import type { ProjectDescription, ProjectInfo, Selection } from '../provider';
 import type { HostMessage, ViewNode, ViewState, WebviewMessage } from './messages';
 import { RevealState, toViewModel } from './viewModel';
 
@@ -39,15 +37,42 @@ function createNonce(): string {
   return randomBytes(16).toString('hex');
 }
 
+/** Type guard validating the shape of a message received from the webview. */
+function isWebviewMessage(value: unknown): value is WebviewMessage {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const m = value as Record<string, unknown>;
+  const optString = (v: unknown): boolean => v === undefined || typeof v === 'string';
+  switch (m.type) {
+    case 'ready':
+    case 'refresh':
+      return true;
+    case 'select':
+      return optString(m.projectId) && (m.profile === null || optString(m.profile)) && optString(m.environment);
+    case 'reveal':
+      return typeof m.path === 'string' && typeof m.revealed === 'boolean';
+    case 'openSource':
+      return typeof m.locationId === 'string';
+    case 'copy':
+      return typeof m.path === 'string' && (m.what === 'value' || m.what === 'keyPath' || m.what === 'envVarName');
+    case 'export':
+      return (m.format === 'json' || m.format === 'env') && typeof m.revealAll === 'boolean';
+    default:
+      return false;
+  }
+}
+
 /** An editor-tab webview showing the merged configuration of one project. */
 export class ConfigPanel {
   private static readonly panels = new Map<string, ConfigPanel>();
   private static mostRecent: ConfigPanel | undefined;
 
   /** The most recently posted view state (undefined before the first render completes). */
-  lastState?: ViewState;
+  private latestState?: ViewState;
 
   private readonly panel: vscode.WebviewPanel;
+  private readonly disposables: vscode.Disposable[] = [];
   private reveals = new RevealState();
   private selectionReady = false;
   private locations = new Map<string, SourceLocation>();
@@ -69,17 +94,22 @@ export class ConfigPanel {
       { enableScripts: true, retainContextWhenHidden: false, localResourceRoots: [distUri] },
     );
     this.panel.webview.html = this.buildHtml(distUri);
-    this.panel.webview.onDidReceiveMessage((message: WebviewMessage) => {
+    this.panel.webview.onDidReceiveMessage((message: unknown) => {
+      if (!isWebviewMessage(message)) {
+        return;
+      }
       void this.handleMessage(message).catch((err: unknown) => {
         void vscode.window.showErrorMessage(`Effective Config: ${err instanceof Error ? err.message : String(err)}`);
       });
-    }, undefined, context.subscriptions);
+    }, undefined, this.disposables);
     this.panel.onDidChangeViewState((e) => {
       if (e.webviewPanel.active) {
         ConfigPanel.mostRecent = this;
       }
-    }, undefined, context.subscriptions);
+    }, undefined, this.disposables);
     this.panel.onDidDispose(() => {
+      this.disposables.forEach((d) => d.dispose());
+      this.disposables.length = 0;
       this.disposed = true;
       if (ConfigPanel.panels.get(this.project.id) === this) {
         ConfigPanel.panels.delete(this.project.id);
@@ -87,7 +117,12 @@ export class ConfigPanel {
       if (ConfigPanel.mostRecent === this) {
         ConfigPanel.mostRecent = undefined;
       }
-    }, undefined, context.subscriptions);
+    }, undefined, this.disposables);
+  }
+
+  /** The most recently posted view state (undefined before the first render completes). */
+  get lastState(): ViewState | undefined {
+    return this.latestState;
   }
 
   /**
@@ -114,7 +149,7 @@ export class ConfigPanel {
 
   /** The view state of the most recently active panel, if any. */
   static get activeState(): ViewState | undefined {
-    return ConfigPanel.mostRecent?.lastState;
+    return ConfigPanel.mostRecent?.latestState;
   }
 
   /** Builds the panel title for a project. */
@@ -199,18 +234,39 @@ export class ConfigPanel {
     }
   }
 
-  /** Applies a selection change (project, profile, environment) and re-renders. */
+  /** Applies a selection change (project, profile, environment) and re-renders; state is committed only on success. */
   private async handleSelect(message: Extract<WebviewMessage, { type: 'select' }>): Promise<void> {
-    const provider = this.createProvider();
-    if (message.projectId !== undefined && message.projectId !== this.project.id) {
-      const target = this.projects.find((p) => p.id === message.projectId);
-      if (target) {
-        const other = ConfigPanel.panels.get(target.id);
-        if (other && other !== this) {
-          other.panel.reveal(undefined, false);
-          await this.render();
-          return;
+    try {
+      const provider = this.createProvider();
+      let target = this.project;
+      let selection = this.selection;
+      let description: ProjectDescription | undefined;
+      if (message.projectId !== undefined && message.projectId !== this.project.id) {
+        const requested = this.projects.find((p) => p.id === message.projectId);
+        if (requested) {
+          const other = ConfigPanel.panels.get(requested.id);
+          if (other && other !== this) {
+            other.panel.reveal(undefined, false);
+            await this.render();
+            return;
+          }
+          description = await provider.describe(requested);
+          target = requested;
+          selection = { ...description.defaultSelection };
         }
+      }
+      if (message.profile !== undefined) {
+        if (message.profile === null) {
+          selection = { environment: selection.environment };
+        } else {
+          description ??= await provider.describe(target);
+          selection = { profile: message.profile, environment: description.profileEnvironments[message.profile] ?? 'Development' };
+        }
+      }
+      if (message.environment !== undefined) {
+        selection = { ...selection, environment: message.environment };
+      }
+      if (target !== this.project) {
         if (ConfigPanel.panels.get(this.project.id) === this) {
           ConfigPanel.panels.delete(this.project.id);
         }
@@ -218,32 +274,13 @@ export class ConfigPanel {
         ConfigPanel.panels.set(target.id, this);
         this.panel.title = ConfigPanel.titleFor(target);
         this.reveals = new RevealState();
-        this.selection = { ...(await provider.describe(target)).defaultSelection };
-        this.selectionReady = true;
       }
-    }
-    if (message.profile !== undefined) {
-      if (message.profile === null) {
-        this.selection = { environment: this.selection.environment };
-      } else {
-        this.selection = { profile: message.profile, environment: await this.profileEnvironment(message.profile) };
-      }
-    }
-    if (message.environment !== undefined) {
-      this.selection = { ...this.selection, environment: message.environment };
+      this.selection = selection;
+      this.selectionReady = true;
+    } catch {
+      // Nothing committed; render reports the failure as an error diagnostic.
     }
     await this.render();
-  }
-
-  /** Looks up the environment a launch profile selects (default `Development`). */
-  private async profileEnvironment(profileName: string): Promise<string> {
-    const file = path.join(this.project.dir, 'Properties', 'launchSettings.json');
-    const text = await nodeFileSystem.readFile(file);
-    if (text === undefined) {
-      return 'Development';
-    }
-    const profile = parseLaunchSettings(text, file).profiles.find((p) => p.name === profileName);
-    return profile?.environmentName ?? 'Development';
   }
 
   /** Opens the source file of a location id at its line and column. */
@@ -283,7 +320,7 @@ export class ConfigPanel {
       }
       const build = await provider.buildLayers(this.project, this.selection);
       entries = mergeLayers(build.layers, this.maskPatterns());
-      const root = toViewModel(buildTree(entries), this.reveals.current(entries), locations);
+      const root = toViewModel(buildTree(entries), this.reveals.current(entries), locations, `r${token}`);
       state = {
         projects: projectsInfo,
         projectId: this.project.id,
@@ -319,7 +356,7 @@ export class ConfigPanel {
     }
     this.locations = locations;
     this.entries = entries;
-    this.lastState = state;
+    this.latestState = state;
     const message: HostMessage = { type: 'state', state };
     await this.panel.webview.postMessage(message);
   }
