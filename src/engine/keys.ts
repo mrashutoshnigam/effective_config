@@ -1,4 +1,13 @@
-const NUMERIC = /^\d+$/;
+const INT_SEGMENT = /^[+-]?\d+$/;
+
+/** Parses a segment as a .NET int32 (optional sign, digits only), or returns undefined. */
+function tryParseInt32(segment: string): number | undefined {
+  if (!INT_SEGMENT.test(segment)) {
+    return undefined;
+  }
+  const n = Number(segment);
+  return n >= -2147483648 && n <= 2147483647 ? n : undefined;
+}
 
 /**
  * Normalizes a configuration key for case-insensitive lookup.
@@ -11,29 +20,28 @@ export function normalizeKey(key: string): string {
 
 /**
  * Compares two single key segments the way .NET's `ConfigurationKeyComparer` does:
- * all-digit segments sort before other segments and are compared by numeric value;
- * other segments are compared case-insensitively and ordinally.
+ * segments that parse as int32 (optional sign, digits only, within range) sort before
+ * other segments and are compared by numeric value; all other segments are compared
+ * ordinally after upper-casing (OrdinalIgnoreCase semantics, so `_` sorts after letters).
  * @param a First key segment.
  * @param b Second key segment.
  * @returns Negative, zero or positive number, usable with `Array.prototype.sort`.
  */
 export function compareKeys(a: string, b: string): number {
-  const aNum = NUMERIC.test(a);
-  const bNum = NUMERIC.test(b);
-  if (aNum && bNum) {
-    const x = BigInt(a);
-    const y = BigInt(b);
-    return x < y ? -1 : x > y ? 1 : 0;
+  const x = tryParseInt32(a);
+  const y = tryParseInt32(b);
+  if (x !== undefined && y !== undefined) {
+    return x - y;
   }
-  if (aNum) {
+  if (x !== undefined) {
     return -1;
   }
-  if (bNum) {
+  if (y !== undefined) {
     return 1;
   }
-  const la = a.toLowerCase();
-  const lb = b.toLowerCase();
-  return la < lb ? -1 : la > lb ? 1 : 0;
+  const ua = a.toUpperCase();
+  const ub = b.toUpperCase();
+  return ua < ub ? -1 : ua > ub ? 1 : 0;
 }
 
 /**

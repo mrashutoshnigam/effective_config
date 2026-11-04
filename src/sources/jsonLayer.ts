@@ -78,7 +78,12 @@ export function parseJsonLayer(text: string, filePath: string): JsonLayerParseRe
   };
   const join = (prefix: string, segment: string): string => (prefix ? `${prefix}:${segment}` : segment);
 
+  let duplicate: Diagnostic | undefined;
+
   const walk = (node: Node, path: string): void => {
+    if (duplicate) {
+      return;
+    }
     switch (node.type) {
       case 'object': {
         const props = node.children ?? [];
@@ -88,10 +93,25 @@ export function parseJsonLayer(text: string, filePath: string): JsonLayerParseRe
           }
           return;
         }
+        const seen = new Set<string>();
         for (const prop of props) {
           const [keyNode, valueNode] = prop.children ?? [];
           if (keyNode && valueNode) {
-            walk(valueNode, join(path, String(keyNode.value)));
+            const fullKey = join(path, String(keyNode.value));
+            const lower = String(keyNode.value).toLowerCase();
+            if (seen.has(lower)) {
+              duplicate = {
+                severity: 'error',
+                message: `Duplicate key '${fullKey}' (keys are case-insensitive)`,
+                location: loc(keyNode.offset),
+              };
+              return;
+            }
+            seen.add(lower);
+            walk(valueNode, fullKey);
+            if (duplicate) {
+              return;
+            }
           }
         }
         return;
@@ -109,7 +129,7 @@ export function parseJsonLayer(text: string, filePath: string): JsonLayerParseRe
         add(path, String(node.value), node);
         return;
       case 'number':
-        add(path, text.substr(node.offset, node.length), node);
+        add(path, text.slice(node.offset, node.offset + node.length), node);
         return;
       case 'boolean':
         add(path, node.value ? 'True' : 'False', node);
@@ -121,5 +141,8 @@ export function parseJsonLayer(text: string, filePath: string): JsonLayerParseRe
   };
 
   walk(root, '');
+  if (duplicate) {
+    return { entries: [], diagnostics: [duplicate] };
+  }
   return { entries, diagnostics: [] };
 }

@@ -40,8 +40,28 @@ describe('parseJsonLayer', () => {
     expect(pairs('{"A:B": 1}')).toEqual([['A:B', '1']]);
   });
 
-  it('keeps duplicate keys as separate entries in source order', () => {
-    expect(pairs('{"A": 1, "A": 2}')).toEqual([['A', '1'], ['A', '2']]);
+  it('rejects an exact duplicate key — no entries, one error at the duplicate key position', () => {
+    const r = parseJsonLayer('{\n  "A": 1,\n  "A": 2\n}', 'f.json');
+    expect(r.entries).toEqual([]);
+    expect(r.diagnostics).toEqual([{
+      severity: 'error',
+      message: "Duplicate key 'A' (keys are case-insensitive)",
+      location: { filePath: 'f.json', line: 2, column: 2 },
+    }]);
+  });
+
+  it("rejects a case-variant duplicate nested key — error names full path 'A:a'", () => {
+    const r = parseJsonLayer('{"S": {"A": 1, "a": 2}}', 'f.json');
+    expect(r.entries).toEqual([]);
+    expect(r.diagnostics).toHaveLength(1);
+    expect(r.diagnostics[0].severity).toBe('error');
+    expect(r.diagnostics[0].message).toBe("Duplicate key 'S:a' (keys are case-insensitive)");
+  });
+
+  it('accepts the same key name in different objects — no diagnostics', () => {
+    const r = parseJsonLayer('{"A": {"X": 1}, "B": {"X": 2}}', 'f.json');
+    expect(r.diagnostics).toEqual([]);
+    expect(r.entries).toHaveLength(2);
   });
 
   it('computes line/column across CRLF line breaks — value on line 1 is at column 7', () => {
@@ -61,7 +81,7 @@ describe('parseJsonLayer', () => {
     expect(diagnostics[0].severity).toBe('error');
     expect(diagnostics[0].location?.filePath).toBe('broken.json');
     expect(diagnostics[0].location?.line).toBeGreaterThanOrEqual(2);
-    expect(diagnostics[0].message).toMatch(/ValueExpected|CloseBraceExpected/);
+    expect(diagnostics[0].message).toMatch(/^JSON parse error: ValueExpected$/);
   });
 
   it('broken JSON on the first line reports line 0', () => {

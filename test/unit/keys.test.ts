@@ -55,7 +55,18 @@ describe('keys', () => {
     expect(compareKeys('abc', 'abd')).toBeLessThan(0);
   });
 
-  it('compareKeys treats negative or decimal segments as text — they sort after numerics', () => {
-    expect(['b', '1.5', '-1', '3'].sort(compareKeys)).toEqual(['3', '-1', '1.5', 'b']);
+  it('compareKeys treats signed integers as numeric and decimals as text — [b,1.5,3,-1,+2] -> [-1,+2,3,1.5,b]', () => {
+    expect(['b', '1.5', '3', '-1', '+2'].sort(compareKeys)).toEqual(['-1', '+2', '3', '1.5', 'b']);
+  });
+
+  it('compareKeys treats values beyond int32 as text — 2147483648 sorts after 5 and after 2147483647 numerically-handled, before b', () => {
+    expect(['b', '2147483648', '5', '2147483647'].sort(compareKeys)).toEqual(['5', '2147483647', '2147483648', 'b']);
+    expect(compareKeys('2147483648', '5')).toBeGreaterThan(0);
+    expect(compareKeys('-2147483649', '-2147483648')).toBeGreaterThan(0);
+  });
+
+  it('compareKeys uses upper-case ordinal-ignore-case — "_" sorts after "a"', () => {
+    expect(compareKeys('_', 'a')).toBeGreaterThan(0);
+    expect(compareKeys('a', '_')).toBeLessThan(0);
   });
 });
