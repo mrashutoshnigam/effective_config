@@ -2,7 +2,7 @@
   "name": "effective-config",
   "displayName": "Effective Config Viewer",
   "description": "Shows the merged .NET appsettings configuration for a chosen environment.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "engines": {
     "vscode": "^1.85.0"
@@ -84,6 +84,7 @@
     "jsonc-parser": "3.3.1"
   },
   "devDependencies": {
+    "@types/mocha": "10.0.10",
     "@types/node": "20.19.43",
     "@types/vscode": "~1.85.0",
     "@vscode/test-cli": "0.0.15",

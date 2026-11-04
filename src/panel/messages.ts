@@ -58,5 +58,6 @@ export type WebviewMessage =
   | { type: 'reveal'; path: string; revealed: boolean }
   | { type: 'openSource'; locationId: string }
   | { type: 'copy'; path: string; what: 'value' | 'keyPath' | 'envVarName' }
+  | { type: 'exportMenu' }
   | { type: 'export'; format: 'json' | 'env'; revealAll: boolean }
   | { type: 'refresh' };

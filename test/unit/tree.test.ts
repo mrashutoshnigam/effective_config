@@ -3,11 +3,11 @@ import { buildTree, flattenTree } from '../../src/engine/tree';
 import type { MergedEntry } from '../../src/engine/types';
 
 /** Builds a MergedEntry whose winner comes from the given layer. */
-function E(key: string, value: string | null, layerId = 'base'): MergedEntry {
+function E(key: string, value: string | null, layerId = 'base', layerIndex = 0): MergedEntry {
   return {
     key,
     value,
-    winner: { layerId, layerLabel: layerId, value, sensitive: false },
+    winner: { layerId, layerLabel: layerId, layerIndex, value, sensitive: false },
     overridden: [],
     sensitive: false,
   };
@@ -90,6 +90,24 @@ describe('buildTree', () => {
     expect(t.children).toHaveLength(1);
     expect(t.children[0].segment).toBe('Foo');
     expect(t.children[0].children).toHaveLength(2);
+  });
+  it('section casing comes from the lowest layer under it — json Logging wins over OS env LOGGING even when listed second', () => {
+    const t = buildTree([E('LOGGING:Console', 'x', 'envOs', 5), E('Logging:LogLevel:Default', 'Info', 'appsettings.json', 0)]);
+    expect(t.children).toHaveLength(1);
+    expect(t.children[0]).toMatchObject({ segment: 'Logging', path: 'Logging' });
+    expect(t.children[0].children.map((c) => c.path)).toEqual(['Logging:Console', 'Logging:LogLevel']);
+  });
+
+  it('section casing considers overridden contributions — lowest overridden layer decides', () => {
+    const high = E('A:B:C', '2', 'envOs', 5);
+    high.overridden = [{ layerId: 'base', layerLabel: 'base', layerIndex: 0, value: '1', sensitive: false }];
+    const t = buildTree([E('a:x', 'v', 'dev', 3), high]);
+    expect(t.children[0].segment).toBe('A');
+  });
+
+  it('equal layer rank keeps the first-seen casing — ties are stable', () => {
+    const t = buildTree([E('Foo:A', '1', 'base', 0), E('FOO:B', '2', 'base', 0)]);
+    expect(t.children[0].segment).toBe('Foo');
   });
 });
 

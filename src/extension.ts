@@ -3,12 +3,18 @@ import * as vscode from 'vscode';
 import { findOwningProject } from './dotnet/projectDiscovery';
 import type { ProjectInfo } from './provider';
 import { ConfigPanel } from './panel/ConfigPanel';
-import type { ViewState } from './panel/messages';
+import type { ViewState, WebviewMessage } from './panel/messages';
 
 /** The API returned from {@link activate}, used by integration tests. */
 export interface ExtensionApi {
   /** The view state of the most recently active panel, if any. */
   getPanelState(): ViewState | undefined;
+  /**
+   * Test hook: delivers a webview message to the most recent panel.
+   * @param message The message the webview would post.
+   * @returns Resolves after the resulting render and post completed.
+   */
+  sendMessage(message: WebviewMessage): Promise<void>;
 }
 
 /**
@@ -80,7 +86,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   context.subscriptions.push(
     vscode.commands.registerCommand('effectiveConfig.show', (uri?: vscode.Uri) => showCommand(context, uri)),
   );
-  return { getPanelState: () => ConfigPanel.activeState };
+  return { getPanelState: () => ConfigPanel.activeState, sendMessage: (message) => ConfigPanel.sendMessage(message) };
 }
 
 /**

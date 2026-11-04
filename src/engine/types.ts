@@ -53,6 +53,8 @@ export interface Contribution {
   layerId: string;
   /** Label of the contributing layer. */
   layerLabel: string;
+  /** 0-based position of the contributing layer in the merge order (0 = lowest priority). */
+  layerIndex: number;
   /** The contributed value (`null` for a section without direct value). */
   value: string | null;
   /** Source location of the contribution, when known. */

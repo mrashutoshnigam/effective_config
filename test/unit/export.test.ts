@@ -4,7 +4,7 @@ import type { MergedEntry } from '../../src/engine/types';
 
 /** Builds a MergedEntry with the given key and value. */
 function E(key: string, value: string | null): MergedEntry {
-  return { key, value, winner: { layerId: 'base', layerLabel: 'base', value, sensitive: false }, overridden: [], sensitive: false };
+  return { key, value, winner: { layerId: 'base', layerLabel: 'base', layerIndex: 0, value, sensitive: false }, overridden: [], sensitive: false };
 }
 const val = (e: MergedEntry) => e.value;
 

@@ -16,8 +16,8 @@ function M(
   return {
     key,
     value,
-    winner: { layerId, layerLabel: layerId, value, location, sensitive },
-    overridden: overriddenValues.map((v) => ({ layerId: 'lower', layerLabel: 'lower', value: v, location, sensitive: overriddenSensitive })),
+    winner: { layerId, layerLabel: layerId, layerIndex: 1, value, location, sensitive },
+    overridden: overriddenValues.map((v) => ({ layerId: 'lower', layerLabel: 'lower', layerIndex: 0, value: v, location, sensitive: overriddenSensitive })),
     sensitive: sensitive || (overriddenValues.length > 0 && overriddenSensitive),
   };
 }

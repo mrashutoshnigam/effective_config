@@ -5,7 +5,7 @@ import type { MergedEntry } from '../../src/engine/types';
 /** Builds a MergedEntry with the given key, value and optional sensitivity. */
 function M(key: string, value: string | null, opts: { sensitive?: boolean } = {}): MergedEntry {
   const sensitive = opts.sensitive ?? false;
-  return { key, value, winner: { layerId: 'base', layerLabel: 'base', value, sensitive }, overridden: [], sensitive };
+  return { key, value, winner: { layerId: 'base', layerLabel: 'base', layerIndex: 0, value, sensitive }, overridden: [], sensitive };
 }
 
 describe('copyText', () => {
@@ -31,6 +31,18 @@ describe('copyText', () => {
 
   it('converts the key to an env var name — A:B becomes A__B', () => {
     expect(copyText([M('A:B', '1')], 'A:B', 'envVarName', new Set())).toBe('A__B');
+  });
+
+  it('builds keyPath from the node path when no entry exists — section row "Logging:LogLevel" copies as given', () => {
+    expect(copyText([M('Logging:LogLevel:Default', 'x')], 'Logging:LogLevel', 'keyPath', new Set())).toBe('Logging:LogLevel');
+  });
+
+  it('builds envVarName from the node path when no entry exists — section "A:B" becomes A__B', () => {
+    expect(copyText([M('A:B:C', '1')], 'A:B', 'envVarName', new Set())).toBe('A__B');
+  });
+
+  it('refuses value for a section without entry — returns undefined', () => {
+    expect(copyText([M('A:B:C', '1')], 'A:B', 'value', new Set())).toBeUndefined();
   });
 
   it('returns undefined for an unknown path', () => {

@@ -11,7 +11,8 @@ const MASKED_VALUE = '***';
  * @param path Key path of the entry (case-insensitive).
  * @param what Which representation to copy.
  * @param revealed Key paths whose sensitive values are currently revealed (case-insensitive).
- * @returns The text, or `undefined` when the path is unknown or the value is masked (sensitive and not revealed).
+ * @returns The text, or `undefined` when the value is masked (sensitive and not revealed) or unknown.
+ * `keyPath` and `envVarName` also work for paths without an entry (section rows) and are built from `path`.
  */
 export function copyText(
   entries: MergedEntry[],
@@ -22,7 +23,14 @@ export function copyText(
   const norm = normalizeKey(path);
   const entry = entries.find((e) => normalizeKey(e.key) === norm);
   if (!entry) {
-    return undefined;
+    switch (what) {
+      case 'keyPath':
+        return path;
+      case 'envVarName':
+        return keyToEnvVarName(path);
+      case 'value':
+        return undefined;
+    }
   }
   switch (what) {
     case 'keyPath':

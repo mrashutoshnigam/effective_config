@@ -128,25 +128,6 @@ export function renderToolbar(state: ViewState, ui: UiState, hooks: ToolbarHooks
 
   bar.append(button('Refresh', 'refresh', () => post({ type: 'refresh' }), 'Refresh'));
 
-  const exp = makeSelect(
-    'export',
-    'Export',
-    [
-      ['', 'Export…'],
-      ['json', 'JSON'],
-      ['env', 'KEY=value'],
-      ['json-reveal', 'JSON (reveal all)'],
-      ['env-reveal', 'KEY=value (reveal all)'],
-    ],
-    '',
-  );
-  exp.addEventListener('change', () => {
-    const v = exp.value;
-    exp.value = '';
-    if (v !== '') {
-      post({ type: 'export', format: v.startsWith('json') ? 'json' : 'env', revealAll: v.endsWith('-reveal') });
-    }
-  });
-  bar.append(exp);
+  bar.append(button('Export…', 'export', () => post({ type: 'exportMenu' }), 'Export'));
   return bar;
 }

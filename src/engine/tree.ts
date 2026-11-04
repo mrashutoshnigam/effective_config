@@ -4,14 +4,20 @@ import { compareKeys, isNumericSegment, splitKey } from './keys';
 /** Mutable build-time node, converted to {@link ConfigNode} once all entries are inserted. */
 interface BuildNode {
   segment: string;
-  path: string;
+  /** Lowest layer index of anything at or below this node; decides the display casing of `segment`. */
+  rank: number;
   entry?: MergedEntry;
   children: Map<string, BuildNode>;
 }
 
 /** Creates an empty build node. */
-function newNode(segment: string, path: string): BuildNode {
-  return { segment, path, children: new Map() };
+function newNode(segment: string, rank: number): BuildNode {
+  return { segment, rank, children: new Map() };
+}
+
+/** The lowest layer index among all contributions of an entry. */
+function lowestLayerIndex(entry: MergedEntry): number {
+  return Math.min(entry.winner.layerIndex, ...entry.overridden.map((c) => c.layerIndex));
 }
 
 /** Collects the distinct winner layer ids of every entry at or below a build node. */
@@ -25,10 +31,10 @@ function collectLayerIds(node: BuildNode, into: Set<string>): void {
 }
 
 /** Converts a build node (recursively) into a sorted, flagged {@link ConfigNode}. */
-function finalize(node: BuildNode): ConfigNode {
+function finalize(node: BuildNode, path: string): ConfigNode {
   const children = [...node.children.values()]
     .sort((a, b) => compareKeys(a.segment, b.segment))
-    .map(finalize);
+    .map((c) => finalize(c, path === '' ? c.segment : `${path}:${c.segment}`));
   const isArray = children.length > 0 && children.every(c => isNumericSegment(c.segment));
   const flags: NodeFlag[] = [];
   if (isArray) {
@@ -43,7 +49,7 @@ function finalize(node: BuildNode): ConfigNode {
   if (children.length > 0 && node.entry !== undefined && node.entry.value !== null) {
     flags.push('valueAndChildren');
   }
-  const result: ConfigNode = { segment: node.segment, path: node.path, children, isArray, flags };
+  const result: ConfigNode = { segment: node.segment, path, children, isArray, flags };
   if (node.entry) {
     result.entry = node.entry;
   }
@@ -52,28 +58,32 @@ function finalize(node: BuildNode): ConfigNode {
 
 /**
  * Builds the hierarchical configuration tree from merged flat entries.
- * Segments are matched case-insensitively (first-seen casing is kept); children are sorted with
+ * Segments are matched case-insensitively; the display casing of a segment comes from the lowest
+ * layer that defines anything at or below it (ties keep the first-seen casing); children are sorted with
  * {@link compareKeys}; intermediate sections that never appear as their own key have no `entry`.
  * @param entries Merged entries (`Section:Key` → value + provenance).
  * @returns The root node (`segment` and `path` are empty, no entry).
  */
 export function buildTree(entries: MergedEntry[]): ConfigNode {
-  const root = newNode('', '');
+  const root = newNode('', 0);
   for (const entry of entries) {
     let current = root;
-    const segments = splitKey(entry.key);
-    segments.forEach((segment, i) => {
+    const rank = lowestLayerIndex(entry);
+    for (const segment of splitKey(entry.key)) {
       const id = segment.toLowerCase();
       let child = current.children.get(id);
       if (!child) {
-        child = newNode(segment, segments.slice(0, i + 1).join(':'));
+        child = newNode(segment, rank);
         current.children.set(id, child);
+      } else if (rank < child.rank) {
+        child.segment = segment;
+        child.rank = rank;
       }
       current = child;
-    });
+    }
     current.entry = entry;
   }
-  return finalize(root);
+  return finalize(root, '');
 }
 
 /**

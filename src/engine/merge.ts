@@ -32,7 +32,7 @@ function compareFullKeys(a: string, b: string): number {
  */
 export function mergeLayers(layers: Layer[], maskPatterns: string[]): MergedEntry[] {
   const map = new Map<string, Acc>();
-  for (const layer of layers) {
+  layers.forEach((layer, layerIndex) => {
     for (const entry of layer.entries) {
       const norm = normalizeKey(entry.key);
       let acc = map.get(norm);
@@ -43,12 +43,13 @@ export function mergeLayers(layers: Layer[], maskPatterns: string[]): MergedEntr
       acc.contributions.push({
         layerId: layer.id,
         layerLabel: layer.label,
+        layerIndex,
         value: entry.value,
         location: entry.location,
         sensitive: layer.sensitive || isSensitiveKey(entry.key, maskPatterns),
       });
     }
-  }
+  });
   const result: MergedEntry[] = [];
   for (const acc of map.values()) {
     const winner = acc.contributions[acc.contributions.length - 1];

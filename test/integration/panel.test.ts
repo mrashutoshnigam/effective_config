@@ -2,12 +2,14 @@ import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { ViewNode, ViewState } from '../../src/panel/messages';
+import type { ViewNode, ViewState, WebviewMessage } from '../../src/panel/messages';
 
 /** Shape of the API returned by the extension's `activate`. */
 interface ExtensionApi {
   /** The view state of the most recently active panel, if any. */
   getPanelState(): ViewState | undefined;
+  /** Test hook: delivers a webview message to the most recent panel and resolves after the render. */
+  sendMessage(message: WebviewMessage): Promise<void>;
 }
 
 /** Absolute path of the fixtures folder (the test workspace root). */
@@ -116,6 +118,44 @@ describe('Effective Config panel (integration)', () => {
     assert.strictEqual(node.value, null);
   });
 
+  it('reveal of a masked secret shows the fixture value, hide masks it again — value then null', async () => {
+    const webApp = (x: ViewState): boolean => x.projectId.includes('WebApp');
+    await openAndGetState(api, fixture('WebApp/appsettings.json'), webApp);
+    await api.sendMessage({ type: 'reveal', path: 'ConnectionStrings:Default', revealed: true });
+    const revealed = find(api.getPanelState()!.root, 'ConnectionStrings:Default')!;
+    assert.strictEqual(revealed.masked, false);
+    assert.strictEqual(revealed.revealed, true);
+    assert.strictEqual(revealed.value, 'Server=placeholder;Database=placeholder');
+
+    await api.sendMessage({ type: 'reveal', path: 'ConnectionStrings:Default', revealed: false });
+    const hidden = find(api.getPanelState()!.root, 'ConnectionStrings:Default')!;
+    assert.strictEqual(hidden.masked, true);
+    assert.strictEqual(hidden.value, null);
+  });
+
+  it('selecting the Staging profile makes the environment follow it — profile and environment are Staging', async () => {
+    await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId.includes('WebApp'));
+    await api.sendMessage({ type: 'select', profile: 'Staging' });
+    const s = api.getPanelState()!;
+    assert.strictEqual(s.profile, 'Staging');
+    assert.strictEqual(s.environment, 'Staging');
+  });
+
+  it('copy value on a masked node leaves the clipboard untouched — sentinel survives', async () => {
+    await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId.includes('WebApp'));
+    const sentinel = 'sentinel-clipboard-value';
+    await vscode.env.clipboard.writeText(sentinel);
+    await api.sendMessage({ type: 'copy', path: 'ConnectionStrings:Default', what: 'value' });
+    assert.strictEqual(await vscode.env.clipboard.readText(), sentinel);
+  });
+
+  it('copy key path on a section row writes the section path — clipboard is Logging:LogLevel', async () => {
+    await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId.includes('WebApp'));
+    await vscode.env.clipboard.writeText('sentinel');
+    await api.sendMessage({ type: 'copy', path: 'Logging:LogLevel', what: 'keyPath' });
+    assert.strictEqual(await vscode.env.clipboard.readText(), 'Logging:LogLevel');
+  });
+
   it('editing appsettings.Development.json refreshes panel within 2 s — new value appears', async () => {
     removeTmp();
     fs.cpSync(fixture('WebApp'), TMP_DIR, { recursive: true });
@@ -131,6 +171,24 @@ describe('Effective Config panel (integration)', () => {
         return cur && find(cur.root, 'Endpoints:0')?.value === 'https://edited.example.test' ? cur : undefined;
       }, 2000);
       assert.strictEqual(find(refreshed.root, 'Endpoints:0')!.value, 'https://edited.example.test');
+    } finally {
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      removeTmp();
+    }
+  });
+
+  it('creating appsettings.QA.json adds QA to the environment list — watcher covers new env files', async () => {
+    removeTmp();
+    fs.cpSync(fixture('WebApp'), TMP_DIR, { recursive: true });
+    try {
+      const s = await openAndGetState(api, path.join(TMP_DIR, 'appsettings.json'), (x) => x.projectId.startsWith(TMP_DIR));
+      assert.ok(!s.environments.some((e) => e.toLowerCase() === 'qa'));
+      fs.writeFileSync(path.join(TMP_DIR, 'appsettings.QA.json'), JSON.stringify({ Qa: { On: true } }));
+      const refreshed = await waitFor(() => {
+        const cur = api.getPanelState();
+        return cur && cur.environments.some((e) => e === 'QA') ? cur : undefined;
+      }, 5000);
+      assert.ok(refreshed.environments.includes('QA'));
     } finally {
       await vscode.commands.executeCommand('workbench.action.closeAllEditors');
       removeTmp();

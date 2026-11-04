@@ -84,7 +84,7 @@ describe('mergeLayers', () => {
       entries: [{ key: 'K', value: 'v', location }],
     };
     const r = mergeLayers([layer], []);
-    expect(r[0].winner).toEqual({ layerId: 'base', layerLabel: 'Base File', value: 'v', location, sensitive: false });
+    expect(r[0].winner).toEqual({ layerId: 'base', layerLabel: 'Base File', layerIndex: 0, value: 'v', location, sensitive: false });
     expect(r[0].overridden).toEqual([]);
   });
 

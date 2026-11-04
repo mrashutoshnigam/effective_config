@@ -282,21 +282,29 @@ describe('render', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('export menu posts the four format and reveal-all combinations; refresh posts refresh', () => {
+  it('Export… button posts exportMenu once per click — no message on mere render', () => {
     const { el, post } = setup(makeState([]));
-    const sel = el.querySelector('select[data-role=export]') as HTMLSelectElement;
-    const cases: [string, WebviewMessage][] = [
-      ['json', { type: 'export', format: 'json', revealAll: false }],
-      ['env', { type: 'export', format: 'env', revealAll: false }],
-      ['json-reveal', { type: 'export', format: 'json', revealAll: true }],
-      ['env-reveal', { type: 'export', format: 'env', revealAll: true }],
-    ];
-    for (const [value, msg] of cases) {
-      choose(sel, value);
-      expect(post).toHaveBeenLastCalledWith(msg);
-    }
+    expect(post).not.toHaveBeenCalled();
+    expect(el.querySelector('select[data-role=export]')).toBeNull();
+    (el.querySelector('[data-action=export]') as HTMLElement).click();
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenLastCalledWith({ type: 'exportMenu' });
+  });
+
+  it('refresh button posts refresh', () => {
+    const { el, post } = setup(makeState([]));
     (el.querySelector('[data-action=refresh]') as HTMLElement).click();
     expect(post).toHaveBeenLastCalledWith({ type: 'refresh' });
+  });
+
+  it('section rows offer copy key path and env var name but no copy value', () => {
+    const { el, post } = setup(makeState(sampleChildren()));
+    const row = el.querySelector('[data-path="Db"]')!;
+    expect(row.querySelector('[data-action=copy-value]')).toBeNull();
+    (row.querySelector('[data-action=copy-key]') as HTMLElement).click();
+    expect(post).toHaveBeenLastCalledWith({ type: 'copy', path: 'Db', what: 'keyPath' });
+    (row.querySelector('[data-action=copy-env]') as HTMLElement).click();
+    expect(post).toHaveBeenLastCalledWith({ type: 'copy', path: 'Db', what: 'envVarName' });
   });
 
   it('typing in search filters the body and updates ui.query', () => {

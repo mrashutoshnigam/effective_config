@@ -196,21 +196,22 @@ function row(node: ViewNode, keyText: string, depth: number, expandable: boolean
   if (node.flags.includes('mixedArray')) {
     r.append(warning('array items come from multiple sources'));
   }
-  if (node.value !== undefined) {
+  const hasValue = node.value !== undefined;
+  if (hasValue) {
     r.append(valueCell(node, ctx.post));
     if (node.winner) {
       r.append(sourceLabel(node.winner.layerLabel, node.winner.locationId, ctx.post, 'badge'));
     }
-    const actions = el('span', 'actions');
-    if (!node.masked) {
-      actions.append(button('⧉', 'copy-value', () => ctx.post({ type: 'copy', path: node.path, what: 'value' }), 'Copy value'));
-    }
-    actions.append(button('⌘', 'copy-key', () => ctx.post({ type: 'copy', path: node.path, what: 'keyPath' }), 'Copy key path'));
-    actions.append(button('$', 'copy-env', () => ctx.post({ type: 'copy', path: node.path, what: 'envVarName' }), 'Copy env var name'));
-    r.append(actions);
-    if (node.overridden.length > 0) {
-      r.append(chain(node, ctx));
-    }
+  }
+  const actions = el('span', 'actions');
+  if (hasValue && !node.masked) {
+    actions.append(button('⧉', 'copy-value', () => ctx.post({ type: 'copy', path: node.path, what: 'value' }), 'Copy value'));
+  }
+  actions.append(button('⌘', 'copy-key', () => ctx.post({ type: 'copy', path: node.path, what: 'keyPath' }), 'Copy key path'));
+  actions.append(button('$', 'copy-env', () => ctx.post({ type: 'copy', path: node.path, what: 'envVarName' }), 'Copy env var name'));
+  r.append(actions);
+  if (hasValue && node.overridden.length > 0) {
+    r.append(chain(node, ctx));
   }
   return r;
 }
