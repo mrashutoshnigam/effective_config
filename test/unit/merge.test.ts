@@ -155,17 +155,20 @@ describe('mergeLayers', () => {
       expect(r.map((e) => e.sensitive)).toEqual([true, true]);
     });
 
-    it('references match case-insensitively and unknown references are ignored', () => {
+    it('unknown references are ignored — A referencing a missing key and a non-sensitive key stays not sensitive', () => {
       const r = mergeLayers(
         [R('f', [{ key: 'A', value: '1', references: ['db_password', 'missing'] }, { key: 'DB_PASSWORD', value: 'p' }])],
         [],
       );
       expect(r.find((e) => e.key === 'A')!.sensitive).toBe(false);
-      const r2 = mergeLayers(
+    });
+
+    it('references match case-insensitively — lower-case ref to a sensitive-layer key makes A sensitive', () => {
+      const r = mergeLayers(
         [R('s', [{ key: 'DB_PASSWORD', value: 'p' }], true), R('f', [{ key: 'A', value: '1', references: ['db_password'] }])],
         [],
       );
-      expect(r2.find((e) => e.key === 'A')!.sensitive).toBe(true);
+      expect(r.find((e) => e.key === 'A')!.sensitive).toBe(true);
     });
 
     it('references copied onto contributions — winner and overridden keep their own references', () => {

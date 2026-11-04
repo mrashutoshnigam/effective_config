@@ -25,6 +25,7 @@ function compareFullKeys(a: string, b: string): number {
 /**
  * Marks contributions sensitive when any key they were expanded from is sensitive
  * (matches a mask pattern, or its merged entry has a sensitive contribution).
+ * References must already be in `:` key form (matched case-insensitively; unknown keys are ignored).
  * Iterates to a fixpoint; sensitivity only ever turns on, so reference cycles terminate.
  */
 function propagateSensitivity(map: Map<string, Acc>, maskPatterns: string[]): void {

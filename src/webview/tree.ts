@@ -133,7 +133,10 @@ function chain(node: ViewNode, ctx: BodyContext): HTMLElement {
     }
     ctx.changed();
   });
-  details.append(el('summary', undefined, `${node.overridden.length} overridden`));
+  const usedCount = node.winner?.references?.length ?? 0;
+  const summary =
+    node.overridden.length > 0 ? `${node.overridden.length} overridden` : `uses ${usedCount} ${usedCount === 1 ? 'key' : 'keys'}`;
+  details.append(el('summary', undefined, summary));
   const list = el('ul');
   const add = (label: string, locationId: string | undefined, text: string, references?: string[]): void => {
     const li = el('li');
@@ -213,7 +216,7 @@ function row(node: ViewNode, keyText: string, depth: number, expandable: boolean
   actions.append(button('⌘', 'copy-key', () => ctx.post({ type: 'copy', path: node.path, what: 'keyPath' }), 'Copy key path'));
   actions.append(button('$', 'copy-env', () => ctx.post({ type: 'copy', path: node.path, what: 'envVarName' }), 'Copy env var name'));
   r.append(actions);
-  if (hasValue && node.overridden.length > 0) {
+  if (hasValue && (node.overridden.length > 0 || (node.winner?.references?.length ?? 0) > 0)) {
     r.append(chain(node, ctx));
   }
   return r;

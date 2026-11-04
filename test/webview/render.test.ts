@@ -240,6 +240,17 @@ describe('render', () => {
     expect(items).toEqual(['f win uses: DB_PASSWORD', 'base old uses: X, Y']);
   });
 
+  it("chain renders for a winner with references and no overrides — shows 'uses: DB_PASSWORD' and 'uses 1 key'", () => {
+    const node = leaf('A:B', 'v', { winner: { layerLabel: 'f', references: ['DB_PASSWORD'] } });
+    const { el } = setup(makeState([section('A', [node])]));
+    const details = el.querySelector('[data-path="A:B"] details')!;
+    expect(details.textContent).toContain('uses: DB_PASSWORD');
+    expect(details.querySelector('summary')!.textContent).toBe('uses 1 key');
+    const uses = details.querySelector('.chain-uses')!;
+    expect(uses).not.toBeNull();
+    expect(uses.hasAttribute('style')).toBe(false);
+  });
+
   it('shows the label line verbatim', () => {
     const { el } = setup(makeState([]));
     expect(el.querySelector('.label')!.textContent).toBe('Simulated — default WebApplication.CreateBuilder order');
