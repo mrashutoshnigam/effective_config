@@ -15,16 +15,55 @@ interface ExtensionApi {
 /** Absolute path of the fixtures folder (the test workspace root). */
 const FIXTURES = vscode.workspace.workspaceFolders![0].uri.fsPath;
 
-/** Temp copy of the WebApp fixture used by the edit test; removed after the test. */
-const TMP_DIR = path.join(FIXTURES, '.tmp-WebApp');
+/** Prefix shared by every temp fixture copy (matches the gitignored `test/fixtures/.tmp-*` pattern). */
+const TMP_PREFIX = '.tmp-';
 
-/** Temp copy of the PyApp fixture used by the python edit test; removed after the test. */
-const TMP_PY_DIR = path.join(FIXTURES, '.tmp-PyApp');
+/**
+ * Returns a unique temp folder path under the fixtures folder (not created yet).
+ * @param kind Fixture name being copied (e.g. `WebApp`).
+ * @param slug Short test-specific suffix so no two tests share a folder.
+ * @returns The absolute path of the temp folder.
+ */
+function tmpDirFor(kind: string, slug: string): string {
+  return path.join(FIXTURES, `${TMP_PREFIX}${kind}-${slug}`);
+}
 
-/** Removes the temp fixture copy, retrying because Windows file watchers may briefly hold the folder. */
-function removeTmp(): void {
-  fs.rmSync(TMP_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-  fs.rmSync(TMP_PY_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+/**
+ * Best-effort recursive removal: retries for a few seconds (Windows file watchers may briefly hold the folder)
+ * and, if the folder still cannot be removed, logs a warning instead of failing the calling test.
+ * @param dir Absolute folder to remove.
+ * @param timeoutMs Maximum time to keep retrying (default 5 s).
+ */
+async function removeDirBestEffort(dir: string, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      if (Date.now() > deadline) {
+        console.warn(`could not remove temp folder ${dir}: ${(err as Error).message}`);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+}
+
+/** Closes all editors (releasing watchers) and removes the given temp folder best-effort. */
+async function cleanupTmp(dir: string): Promise<void> {
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  await removeDirBestEffort(dir);
+}
+
+/** Removes every `.tmp-*` folder under the fixtures folder, best-effort. */
+async function removeAllTmp(): Promise<void> {
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  for (const entry of fs.readdirSync(FIXTURES)) {
+    if (entry.startsWith(TMP_PREFIX)) {
+      await removeDirBestEffort(path.join(FIXTURES, entry), 8000);
+    }
+  }
 }
 
 /**
@@ -104,8 +143,8 @@ describe('Effective Config panel (integration)', () => {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
   });
 
-  after(() => {
-    removeTmp();
+  after(async () => {
+    await removeAllTmp();
   });
 
   it('show command on WebApp appsettings.json opens panel with Development and Trace log level', async () => {
@@ -161,7 +200,7 @@ describe('Effective Config panel (integration)', () => {
   });
 
   it('editing appsettings.Development.json refreshes panel within 2 s — new value appears', async () => {
-    removeTmp();
+    const TMP_DIR = tmpDirFor('WebApp', 'edit');
     fs.cpSync(fixture('WebApp'), TMP_DIR, { recursive: true });
     try {
       const s = await openAndGetState(api, path.join(TMP_DIR, 'appsettings.json'), (x) => x.projectId === path.join(TMP_DIR, 'WebApp.csproj'));
@@ -176,13 +215,12 @@ describe('Effective Config panel (integration)', () => {
       }, 2000);
       assert.strictEqual(find(refreshed.root, 'Endpoints:0')!.value, 'https://edited.example.test');
     } finally {
-      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-      removeTmp();
+      await cleanupTmp(TMP_DIR);
     }
   });
 
   it('creating appsettings.QA.json adds QA to the environment list — watcher covers new env files', async () => {
-    removeTmp();
+    const TMP_DIR = tmpDirFor('WebApp', 'qa');
     fs.cpSync(fixture('WebApp'), TMP_DIR, { recursive: true });
     try {
       const s = await openAndGetState(api, path.join(TMP_DIR, 'appsettings.json'), (x) => x.projectId === path.join(TMP_DIR, 'WebApp.csproj'));
@@ -194,8 +232,7 @@ describe('Effective Config panel (integration)', () => {
       }, 5000);
       assert.ok(refreshed.environments.includes('QA'));
     } finally {
-      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-      removeTmp();
+      await cleanupTmp(TMP_DIR);
     }
   });
 
@@ -282,7 +319,7 @@ describe('Effective Config panel (integration)', () => {
   });
 
   it('editing .env.development refreshes the python panel within 2 s — new DB_HOST appears', async () => {
-    removeTmp();
+    const TMP_PY_DIR = tmpDirFor('PyApp', 'edit');
     fs.cpSync(fixture('PyApp'), TMP_PY_DIR, { recursive: true });
     try {
       const projectId = path.join(TMP_PY_DIR, 'pyproject.toml');
@@ -297,8 +334,7 @@ describe('Effective Config panel (integration)', () => {
       }, 2000);
       assert.strictEqual(find(refreshed.root, 'DB_HOST')!.value, 'edited-db');
     } finally {
-      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-      removeTmp();
+      await cleanupTmp(TMP_PY_DIR);
     }
   });
 });
