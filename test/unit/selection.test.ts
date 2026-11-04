@@ -7,6 +7,9 @@ const description: ProjectDescription = {
   environments: ['Development', 'Staging'],
   profileEnvironments: { WebApp: 'Development', Staging: 'Staging', NoEnv: undefined },
   defaultSelection: { profile: 'WebApp', environment: 'Development' },
+  mergeLabel: 'label',
+  envVarSeparator: '__',
+  watchGlobs: [],
 };
 
 describe('nextSelection', () => {

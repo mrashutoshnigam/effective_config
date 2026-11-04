@@ -32,6 +32,12 @@ export interface ProjectDescription {
   profileEnvironments: Record<string, string | undefined>;
   /** The selection to preselect in the UI. */
   defaultSelection: Selection;
+  /** Label describing the simulated merge order, shown in the UI. */
+  mergeLabel: string;
+  /** Separator joining key segments in environment variable names (`__` for .NET). */
+  envVarSeparator: string;
+  /** Glob patterns, relative to the project directory, of files whose changes should trigger a rebuild. */
+  watchGlobs: string[];
 }
 
 /** The result of building the ordered layers for one selection. */

@@ -24,6 +24,12 @@ export interface DotnetProviderOptions {
   jsonLayers: string[];
 }
 
+/** Merge-order label of the .NET provider. */
+const DOTNET_MERGE_LABEL = 'Simulated — default WebApplication.CreateBuilder order';
+
+/** Host-facing description fields that are the same for every .NET project. */
+const DOTNET_EXTRAS = { mergeLabel: DOTNET_MERGE_LABEL, envVarSeparator: '__', watchGlobs: ['appsettings*.json'] };
+
 /** Simulates the default `WebApplication.CreateBuilder` configuration sources for a .NET project. */
 export class DotnetProvider implements ConfigProvider {
   /**
@@ -51,7 +57,7 @@ export class DotnetProvider implements ConfigProvider {
     const environments = listEnvironments(files, this.options.jsonLayers);
     const { profiles } = await this.readLaunchSettings(project);
     if (profiles.length === 0) {
-      return { profiles: [], environments, profileEnvironments: {}, defaultSelection: { environment: 'Development' } };
+      return { profiles: [], environments, profileEnvironments: {}, defaultSelection: { environment: 'Development' }, ...DOTNET_EXTRAS };
     }
     const first = profiles[0];
     return {
@@ -59,6 +65,7 @@ export class DotnetProvider implements ConfigProvider {
       environments,
       profileEnvironments: Object.fromEntries(profiles.map((p) => [p.name, p.environmentName])),
       defaultSelection: { profile: first.name, environment: first.environmentName ?? 'Development' },
+      ...DOTNET_EXTRAS,
     };
   }
 

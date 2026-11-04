@@ -1,0 +1,27 @@
+{
+  // Debug configurations for PyApp; the node config is not a Python profile and is ignored.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "PyApp: dev",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/PyApp/main.py",
+      "env": { "APP_ENV": "development", "LOG__LEVEL": "trace" },
+      "envFile": "${workspaceFolder}/PyApp/.env.profile"
+    },
+    {
+      "name": "PyApp: prod",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/PyApp/main.py",
+      "env": { "APP_ENV": "production" }
+    },
+    {
+      "name": "Node helper",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/helper.js"
+    }
+  ]
+}

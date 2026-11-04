@@ -166,6 +166,14 @@ describe('DotnetProvider.describe', () => {
 
   it('without launchSettings returns no profiles and Development — Worker', async () => {
     const d = await make().describe(project('Worker'));
-    expect(d).toEqual({ profiles: [], environments: ['Development', 'Staging', 'Production'], profileEnvironments: {}, defaultSelection: { environment: 'Development' } });
+    expect(d).toEqual({ profiles: [], environments: ['Development', 'Staging', 'Production'], profileEnvironments: {}, defaultSelection: { environment: 'Development' },
+      mergeLabel: 'Simulated — default WebApplication.CreateBuilder order', envVarSeparator: '__', watchGlobs: ['appsettings*.json'] });
+  });
+
+  it("describe returns .NET label, '__' separator and appsettings glob", async () => {
+    const d = await make().describe(project('WebApp'));
+    expect(d.mergeLabel).toBe('Simulated — default WebApplication.CreateBuilder order');
+    expect(d.envVarSeparator).toBe('__');
+    expect(d.watchGlobs).toEqual(['appsettings*.json']);
   });
 });
