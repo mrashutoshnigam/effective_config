@@ -44,17 +44,25 @@ describe('parseDotenv', () => {
     expect(pairs('﻿A=1\nB=2')).toEqual([['A', '1'], ['B', '2']]);
   });
 
-  it('warns on an unterminated double quote and stops parsing at end of file — earlier entries kept', () => {
-    const r = parseDotenv('A=1\nB="never closed\nC=3\n', P);
-    expect(r.entries.map((e) => e.name)).toEqual(['A']);
+  it('warns on an unterminated double quote, skips only that line and still loads later entries', () => {
+    const r = parseDotenv('A=1\nB="never closed\nC=3', P);
+    expect(r.entries.map((e) => e.name)).toEqual(['A', 'C']);
     expect(r.diagnostics).toHaveLength(1);
     expect(r.diagnostics[0]).toMatchObject({ severity: 'warning', message: 'Cannot parse line 2: unterminated quote' });
   });
 
-  it('warns on an unterminated single quote and stops parsing', () => {
+  it('warns on an unterminated single quote and resumes on the next line', () => {
     const r = parseDotenv("A='oops\nB=2\n", P);
-    expect(r.entries).toEqual([]);
+    expect(r.entries.map((e) => e.name)).toEqual(['B']);
     expect(r.diagnostics[0]).toMatchObject({ severity: 'warning', message: 'Cannot parse line 1: unterminated quote' });
+  });
+
+  it('still loads a quote that closes on a later line as one multi-line value', () => {
+    expect(pairs('A="x\ny"\nB=2')).toEqual([['A', 'x\ny'], ['B', '2']]);
+  });
+
+  it('treats a hash after whitespace following = as a value: KEY= #note yields #note', () => {
+    expect(pairs('A= #note\nB=a #c\nC=#x')).toEqual([['A', '#note'], ['B', 'a'], ['C', '#x']]);
   });
 
   it('keeps a hash without leading whitespace inside an unquoted value', () => {
@@ -69,9 +77,9 @@ describe('parseDotenv', () => {
     expect(pairs('export=1\nexport X=2')).toEqual([['export', '1'], ['X', '2']]);
   });
 
-  it('parses an empty value as empty string with column right after = and spaces', () => {
+  it('parses an empty value as empty string with column right after = and spaces (a # right after = is a value, not a comment)', () => {
     const r = parseDotenv('A=\nB =  \nC= # c', P);
-    expect(r.entries.map((e) => [e.name, e.value])).toEqual([['A', ''], ['B', ''], ['C', '']]);
+    expect(r.entries.map((e) => [e.name, e.value])).toEqual([['A', ''], ['B', ''], ['C', '# c']]);
     expect(r.entries[0].location.column).toBe(2);
     expect(r.entries[1].location.column).toBe(5);
   });
@@ -144,8 +152,8 @@ describe('expandDotenvValue', () => {
       .toEqual({ value: 'pg://u:none@h', references: ['U', 'P'] });
   });
 
-  it('uses the default when lookup returns an empty string', () => {
-    expect(expandDotenvValue('${A:-d}', env({ A: '' })).value).toBe('d');
+  it('keeps an empty but defined lookup value empty — default only for undefined', () => {
+    expect(expandDotenvValue('${A:-d}', env({ A: '' })).value).toBe('');
   });
 
   it('uses the lookup value over the default when defined', () => {

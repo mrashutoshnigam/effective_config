@@ -49,8 +49,9 @@ An OS variable is shown only when its key matches (case-insensitively) a key def
 - Single-quoted: literal, no escapes, no expansion.
 - Double-quoted: escapes `\n \r \t \\ \" \'`, may span multiple lines, expansion applies.
 - `KEY` with no `=` → skipped with an info diagnostic (python-dotenv yields `None` and `load_dotenv` does not set it).
-- Expansion in unquoted and double-quoted values: `${VAR}` and `${VAR:-default}`. Lookup: with `fileOverridesOs=false`, process environment (OS + profile env/envFile) first, then keys defined earlier in the same file and lower file layers; with `true`, file values first. Unresolved → default or empty string.
-- Unparseable line → warning diagnostic with file and line; the rest of the file still loads.
+- Expansion in unquoted and double-quoted values: `${VAR}` and `${VAR:-default}`. Lookup: with `fileOverridesOs=false`, process environment (OS + profile env/envFile) first, then keys defined earlier in the same file and lower file layers; with `true`, file values first. Undefined → default (used only when the lookup is `undefined`; an empty defined value stays empty), no default → empty string.
+- Unparseable line or unterminated quote → warning diagnostic with file and line; only that line is skipped and the rest of the file still loads.
+- Unquoted values: an inline comment needs `#` preceded by whitespace after the value start (`KEY= #x` → `#x`).
 - Positions: value start line/column for click-through.
 
 ## Masking

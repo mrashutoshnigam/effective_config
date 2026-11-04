@@ -41,8 +41,8 @@ const isBlank = (c: string): boolean => c === ' ' || c === '\t';
  * @param text File contents.
  * @param filePath Path recorded in locations.
  * @returns Entries and diagnostics. A bare `KEY` yields an `info`; an unparseable line
- * yields a `warning` and parsing continues; an unterminated quote yields a `warning` and
- * parsing stops.
+ * yields a `warning` and parsing continues; an unterminated quote yields a `warning`, skips
+ * only that line and parsing resumes on the next line.
  */
 export function parseDotenv(text: string, filePath: string): DotenvParseResult {
   const src = stripBom(text).replace(/\r\n?/g, '\n');
@@ -139,7 +139,8 @@ export function parseDotenv(text: string, filePath: string): DotenvParseResult {
       }
       if (!closed) {
         warn(`Cannot parse line ${lineNo}: unterminated quote`, keyStart);
-        break;
+        pos = eol + 1;
+        continue;
       }
       const after = lineEnd(j + 1);
       let k = j + 1;
@@ -156,8 +157,8 @@ export function parseDotenv(text: string, filePath: string): DotenvParseResult {
     // Unquoted value.
     const valueStart = i;
     let end = eol;
-    for (let k = valueStart; k < eol; k++) {
-      if (src[k] === '#' && k > keyStart && isBlank(src[k - 1])) {
+    for (let k = valueStart + 1; k < eol; k++) {
+      if (src[k] === '#' && isBlank(src[k - 1])) {
         end = k;
         break;
       }
@@ -172,8 +173,8 @@ export function parseDotenv(text: string, filePath: string): DotenvParseResult {
 
 /**
  * Expands `${NAME}` and `${NAME:-default}` references in a value (python-dotenv style).
- * `$NAME` without braces stays literal. The default is used when the lookup returns
- * `undefined` or an empty string; an unresolved reference without default becomes `''`.
+ * `$NAME` without braces stays literal. The default is used only when the lookup returns
+ * `undefined` (an empty but defined value stays empty); an unresolved reference without default becomes `''`.
  * Default text is not expanded further.
  * @param value Raw value.
  * @param lookup Resolves a variable name, or `undefined` when unknown.
@@ -190,7 +191,7 @@ export function expandDotenvValue(
       references.push(name);
     }
     const found = lookup(name);
-    if (found === undefined || found === '') {
+    if (found === undefined) {
       return dflt ?? '';
     }
     return found;

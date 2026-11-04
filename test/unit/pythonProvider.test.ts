@@ -326,4 +326,13 @@ describe('PythonProvider.buildLayers', () => {
     const b = await make({ fs: overlayFs({}, { [dir]: [] }), workspaceRoot: dir }).buildLayers(project(dir, 'Bare'), NO_PROFILE);
     expect(b.watchPaths).toContain(path.join(dir, '.vscode', 'launch.json'));
   });
+
+  it('watchPaths include the workspace-root and walked-up launch.json candidates when none exists, without duplicates', async () => {
+    const root = path.join(FIXTURES, 'Mono2');
+    const sub = path.join(root, 'svc');
+    const b = await make({ fs: overlayFs({}, { [sub]: [] }), workspaceRoot: root }).buildLayers(project(sub, 'svc'), NO_PROFILE);
+    const rootLaunch = path.join(root, '.vscode', 'launch.json');
+    expect(b.watchPaths).toEqual(expect.arrayContaining([path.join(sub, '.vscode', 'launch.json'), rootLaunch]));
+    expect(b.watchPaths.filter((p) => p === rootLaunch)).toHaveLength(1);
+  });
 });

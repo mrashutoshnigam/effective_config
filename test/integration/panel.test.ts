@@ -223,6 +223,7 @@ describe('Effective Config panel (integration)', () => {
   it('copy env var name on a python key uses the configured delimiter — nestedDelimiter "_" copies DB_HOST for DB:HOST', async () => {
     const config = vscode.workspace.getConfiguration('effectiveConfig');
     const previous = config.inspect<string>('python.nestedDelimiter')?.workspaceValue;
+    const vscodeDirExisted = fs.existsSync(fixture('.vscode'));
     try {
       await config.update('python.nestedDelimiter', '_', vscode.ConfigurationTarget.Workspace);
       await openAndGetState(api, fixture('PyApp/.env'), (x) => x.projectId === fixture('PyApp/pyproject.toml'));
@@ -230,7 +231,9 @@ describe('Effective Config panel (integration)', () => {
       assert.strictEqual(await vscode.env.clipboard.readText(), 'DB_HOST');
     } finally {
       await vscode.workspace.getConfiguration('effectiveConfig').update('python.nestedDelimiter', previous, vscode.ConfigurationTarget.Workspace);
-      fs.rmSync(fixture('.vscode'), { recursive: true, force: true });
+      if (!vscodeDirExisted) {
+        fs.rmSync(fixture('.vscode'), { recursive: true, force: true });
+      }
     }
   });
 

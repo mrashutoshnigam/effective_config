@@ -54,7 +54,7 @@ Integration tests launch the locally installed VS Code (set `VSCODE_EXECUTABLE_P
 ## What it does
 
 - Opens a webview panel in an editor tab for one .NET project (a `.csproj` directory containing `appsettings.json`) or Python project (see [Python](#python)), with a project switcher listing both, tagged `[.NET]` / `[Python]`.
-- Pick a launch profile (from `Properties/launchSettings.json`, or `.vscode/launch.json` for Python) and an environment; the profile preselects the environment from `ASPNETCORE_ENVIRONMENT` (else `DOTNET_ENVIRONMENT`). Without launch settings there is no profile and the environment is `Development`.
+- Pick a launch profile (from `Properties/launchSettings.json`, or `.vscode/launch.json` for Python) and an environment; the profile preselects the environment. .NET: from `ASPNETCORE_ENVIRONMENT` (else `DOTNET_ENVIRONMENT`), defaulting to `Development`. Python: from the profile's environment sources (see Python environment detection), defaulting to `development`. Without launch settings there is no profile and the default environment is used.
 - Tree view by default, a flat `Section:Key = value` toggle, and search by key or value.
 - Every value shows its winning source and the chain of overridden values; click a source to open the file at the line.
 - Open it from the Command Palette (`Effective Config: Show Merged Configuration`), the Explorer context menu on `appsettings*.json` / `*.csproj` / `.env*`, or the editor-title button on `appsettings*.json` / `.env*`.
@@ -102,11 +102,11 @@ Keys are split on `effectiveConfig.python.nestedDelimiter` (default `__`) into t
 
 ### Parsing and expansion
 
-`.env` files follow python-dotenv rules: `KEY=value`, optional `export ` prefix, comments, ` #` inline comments for unquoted values, single-quoted literals, and double-quoted values with escapes (`\n \r \t \\ \" \'`) that may span lines. `${VAR}` and `${VAR:-default}` are expanded in unquoted and double-quoted values; lookup prefers the process environment (OS plus profile) unless `fileOverridesOs` is on, then keys defined earlier in the same or lower file layers. Unresolved references become the default or an empty string. A value expanded from a secret is itself masked (for example a `DATABASE_URL` built from `${DB_PASSWORD}`), and the override chain shows which keys were used. A key without `=` is skipped with an info diagnostic; an unparseable line produces a warning and the rest of the file still loads.
+`.env` files follow python-dotenv rules: `KEY=value`, optional `export ` prefix, comments, ` #` inline comments for unquoted values, single-quoted literals, and double-quoted values with escapes (`\n \r \t \\ \" \'`) that may span lines. `${VAR}` and `${VAR:-default}` are expanded in unquoted and double-quoted values; lookup prefers the process environment (OS plus profile) unless `fileOverridesOs` is on, then keys defined earlier in the same or lower file layers. An unresolved reference becomes the default, or an empty string without one; the default applies only when the variable is undefined (an empty but defined value stays empty). A value expanded from a secret is itself masked (for example a `DATABASE_URL` built from `${DB_PASSWORD}`), and the override chain shows which keys were used. A key without `=` is skipped with an info diagnostic; an unparseable line or an unterminated quote produces a warning, only that line is skipped and the rest of the file still loads.
 
 ### Profiles and environment detection
 
-Profiles are the `debugpy` / `python` configurations in the nearest `.vscode/launch.json` (searched from the project folder up to the workspace folder). `${workspaceFolder}` in `envFile` is substituted. The environment name is the first of `APP_ENV`, `ENV`, `ENVIRONMENT`, `PYTHON_ENV` (`effectiveConfig.python.environmentVariables`) found in the profile `env`, the profile `envFile`, `.env`, then the OS; otherwise `development`. The environment list is `development`, `staging`, `production` plus names from existing `.env.<name>` files (excluding `local`, `example`, `sample`, `template`, `defaults` and `*.local`).
+Profiles are the `debugpy` / `python` configurations in the nearest `.vscode/launch.json` (searched from the project folder up to the workspace folder). `${workspaceFolder}` in `envFile` is substituted. The environment name is detected by checking sources in order (profile `env`, profile `envFile`, `.env`, then the OS); within each source the variable names from `effectiveConfig.python.environmentVariables` (default `APP_ENV`, `ENV`, `ENVIRONMENT`, `PYTHON_ENV`) are tried in the configured order, and the first match wins; otherwise `development`. The environment list is `development`, `staging`, `production` plus names from existing `.env.<name>` files (excluding `local`, `example`, `sample`, `template`, `defaults` and `*.local`).
 
 ## Masking and reveal
 
@@ -137,4 +137,4 @@ The panel refreshes when `appsettings*.json`, `launchSettings.json`, the `.cspro
 
 .NET: custom providers, Azure Key Vault / App Configuration, `Program.cs` reordering, `Directory.Build.props` `UserSecretsId`, legacy `SQLCONNSTR_`-style prefixes, command-line switch mappings — not reflected.
 
-Python: `.flaskenv`, Django settings modules, `os.environ` reads in code, conda `environment.yml`, direnv `.envrc`, Poetry/pipenv auto-loading, pydantic `secrets_dir`, and app-specific loaders are not reflected.
+Python: `.flaskenv`, Django settings modules, `os.environ` reads in code, conda `environment.yml`, direnv `.envrc`, Poetry/pipenv auto-loading, pydantic `secrets_dir`, and app-specific loaders are not reflected. Single-quoted escapes (`\\`, `\'`) and the double-quote escapes `\a \b \f \v` are not decoded.

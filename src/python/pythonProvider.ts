@@ -65,6 +65,8 @@ interface LaunchInfo {
   configs: PythonLaunchConfig[];
   diagnostics: Diagnostic[];
   file: string;
+  /** Every launch.json location checked (watched so a newly created file is noticed). */
+  candidates: string[];
 }
 
 /** Simulates python-dotenv loading plus VS Code launch.json environment injection for a Python project. */
@@ -98,12 +100,14 @@ export class PythonProvider implements ConfigProvider {
     const root = normPath(workspaceRoot);
     const under = (d: string): boolean => normPath(d) === root || normPath(d).startsWith(root + '/');
     const projectUnderRoot = under(project.dir);
+    const candidates: string[] = [];
     let dir = project.dir;
     for (;;) {
       const file = path.join(dir, '.vscode', 'launch.json');
+      candidates.push(file);
       const text = await fs.readFile(file);
       if (text !== undefined) {
-        return { ...parsePythonLaunchConfigs(text, file, workspaceRoot), file };
+        return { ...parsePythonLaunchConfigs(text, file, workspaceRoot), file, candidates };
       }
       const parent = path.dirname(dir);
       if (!projectUnderRoot || normPath(dir) === root || parent === dir) {
@@ -111,7 +115,7 @@ export class PythonProvider implements ConfigProvider {
       }
       dir = parent;
     }
-    return { configs: [], diagnostics: [], file: path.join(project.dir, '.vscode', 'launch.json') };
+    return { configs: [], diagnostics: [], file: path.join(project.dir, '.vscode', 'launch.json'), candidates };
   }
 
   /**
@@ -215,12 +219,17 @@ export class PythonProvider implements ConfigProvider {
 
   /** @inheritdoc */
   async buildLayers(project: ProjectInfo, selection: Selection): Promise<LayerBuild> {
-    const { fs, osEnv, envFiles, fileOverridesOs, envPrefixes } = this.options;
+    const { fs, osEnv, envFiles, fileOverridesOs, envPrefixes, workspaceRoot } = this.options;
     const diagnostics: Diagnostic[] = [];
     const watchPaths: string[] = [];
 
     const launch = await this.readLaunch(project);
     watchPaths.push(launch.file, project.projectFile);
+    for (const candidate of [...launch.candidates, path.join(workspaceRoot, '.vscode', 'launch.json')]) {
+      if (!watchPaths.includes(candidate)) {
+        watchPaths.push(candidate);
+      }
+    }
     diagnostics.push(...launch.diagnostics);
     let profile: PythonLaunchConfig | undefined;
     if (selection.profile !== undefined) {
