@@ -9,6 +9,9 @@ node_modules/**
 **/*.map
 **/*.ts
 esbuild.mjs
-vitest.config.ts
+vitest.config.mts
 tsconfig.json
 .gitignore
+package-lock.json
+.claude/**
+graphify-out/**
