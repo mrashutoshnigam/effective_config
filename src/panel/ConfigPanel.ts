@@ -1,10 +1,12 @@
 import * as os from 'node:os';
+import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import { DotnetProvider } from '../dotnet/dotnetProvider';
 import { DEFAULT_JSON_LAYERS } from '../dotnet/environments';
 import { nodeFileSystem } from '../dotnet/fileSystem';
 import { normalizeKey } from '../engine/keys';
+import { copyText, exportText } from './actions';
 import { mergeLayers } from '../engine/merge';
 import { buildTree } from '../engine/tree';
 import type { Diagnostic, MergedEntry, SourceLocation } from '../engine/types';
@@ -17,6 +19,9 @@ const DEFAULT_MASK_PATTERNS = ['*Password*', '*Secret*', '*Key*', 'ConnectionStr
 
 /** Label shown in the UI describing the simulated merge order. */
 const MERGE_LABEL = 'Simulated — default WebApplication.CreateBuilder order';
+
+/** Delay in milliseconds before a file change triggers a re-render. */
+const REFRESH_DEBOUNCE_MS = 200;
 
 /** The view type of the configuration webview panel. */
 const VIEW_TYPE = 'effectiveConfig';
@@ -80,6 +85,9 @@ export class ConfigPanel {
   private selection: Selection = { environment: 'Development' };
   private renderCounter = 0;
   private disposed = false;
+  private watchers: vscode.Disposable[] = [];
+  private watchedPaths = new Set<string>();
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   private constructor(
     private readonly context: vscode.ExtensionContext,
@@ -107,7 +115,13 @@ export class ConfigPanel {
         ConfigPanel.mostRecent = this;
       }
     }, undefined, this.disposables);
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('effectiveConfig')) {
+        void this.render();
+      }
+    }, undefined, this.disposables);
     this.panel.onDidDispose(() => {
+      this.clearWatchers();
       this.disposables.forEach((d) => d.dispose());
       this.disposables.length = 0;
       this.disposed = true;
@@ -223,15 +237,84 @@ export class ConfigPanel {
         await this.openSource(message.locationId);
         break;
       case 'copy':
-        // Task 9
+        await this.copy(message.path, message.what);
         break;
       case 'export':
-        // Task 9
+        await this.export(message.format, message.revealAll);
         break;
       case 'refresh':
-        // Task 9
+        await this.render();
         break;
     }
+  }
+
+  /** Copies a value, key path or env var name to the clipboard; masked values are not copied. */
+  private async copy(keyPath: string, what: 'value' | 'keyPath' | 'envVarName'): Promise<void> {
+    const norm = normalizeKey(keyPath);
+    if (!this.entries.some((e) => normalizeKey(e.key) === norm)) {
+      return;
+    }
+    const text = copyText(this.entries, keyPath, what, this.reveals.current(this.entries));
+    if (text === undefined) {
+      void vscode.window.showInformationMessage('Reveal the value before copying');
+      return;
+    }
+    await vscode.env.clipboard.writeText(text);
+  }
+
+  /** Exports the merged configuration into an untitled document; revealing secrets needs confirmation. */
+  private async export(format: 'json' | 'env', revealAll: boolean): Promise<void> {
+    if (revealAll) {
+      const choice = await vscode.window.showWarningMessage('Export will include secret values in plain text.', { modal: true }, 'Export');
+      if (choice !== 'Export') {
+        return;
+      }
+    }
+    const content = exportText(this.entries, format, revealAll);
+    const doc = await vscode.workspace.openTextDocument({ content, language: format === 'json' ? 'json' : 'properties' });
+    await vscode.window.showTextDocument(doc, { preview: false });
+  }
+
+  /** Disposes all file watchers and the pending debounce timer. */
+  private clearWatchers(): void {
+    this.watchers.forEach((w) => w.dispose());
+    this.watchers = [];
+    this.watchedPaths = new Set();
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+  }
+
+  /** Schedules a debounced re-render after a watched file changed. */
+  private scheduleRefresh(): void {
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      if (!this.disposed) {
+        void this.render();
+      }
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  /** Rebuilds the file watchers when the set of watched paths changed. */
+  private syncWatchers(paths: string[]): void {
+    const next = new Set(paths);
+    if (next.size === this.watchedPaths.size && [...next].every((p) => this.watchedPaths.has(p))) {
+      return;
+    }
+    this.watchers.forEach((w) => w.dispose());
+    this.watchers = [];
+    for (const p of next) {
+      const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(path.dirname(p)), path.basename(p)));
+      watcher.onDidCreate(() => this.scheduleRefresh());
+      watcher.onDidChange(() => this.scheduleRefresh());
+      watcher.onDidDelete(() => this.scheduleRefresh());
+      this.watchers.push(watcher);
+    }
+    this.watchedPaths = next;
   }
 
   /** Applies a selection change (project, profile, environment) and re-renders; state is committed only on success. */
@@ -311,6 +394,7 @@ export class ConfigPanel {
     let state: ViewState;
     let locations = new Map<string, SourceLocation>();
     let entries: MergedEntry[] = [];
+    let watchPaths: string[] | undefined;
     try {
       const provider = this.createProvider();
       const description = await provider.describe(this.project);
@@ -319,6 +403,7 @@ export class ConfigPanel {
         this.selectionReady = true;
       }
       const build = await provider.buildLayers(this.project, this.selection);
+      watchPaths = build.watchPaths;
       entries = mergeLayers(build.layers, this.maskPatterns());
       const root = toViewModel(buildTree(entries), this.reveals.current(entries), locations, `r${token}`);
       state = {
@@ -356,6 +441,9 @@ export class ConfigPanel {
     }
     this.locations = locations;
     this.entries = entries;
+    if (watchPaths) {
+      this.syncWatchers(watchPaths);
+    }
     this.latestState = state;
     const message: HostMessage = { type: 'state', state };
     await this.panel.webview.postMessage(message);

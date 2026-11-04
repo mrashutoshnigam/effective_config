@@ -84,6 +84,9 @@ export class DotnetProvider implements ConfigProvider {
       }
       const filePath = path.join(project.dir, resolved.fileName);
       if (resolved.caseMismatch) {
+        if (!watchPaths.includes(filePath)) {
+          watchPaths.push(filePath);
+        }
         diagnostics.push({
           severity: 'warning',
           message: `'${resolved.fileName}' matches '${expected}' only ignoring case; it would not load on case-sensitive file systems`,

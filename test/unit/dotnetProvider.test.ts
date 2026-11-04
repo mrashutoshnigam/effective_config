@@ -139,6 +139,14 @@ describe('DotnetProvider.buildLayers', () => {
     ]));
   });
 
+  it('watches the actual case-mismatched file too — appsettings.staging.json plus expected name, no duplicates', async () => {
+    const p = project('WebApp');
+    const build = await make().buildLayers(p, { environment: 'Staging' });
+    expect(build.watchPaths).toContain(path.join(p.dir, 'appsettings.staging.json'));
+    expect(build.watchPaths).toContain(path.join(p.dir, 'appsettings.Staging.json'));
+    expect(new Set(build.watchPaths).size).toBe(build.watchPaths.length);
+  });
+
   it('filters OS env by top-level keys of JSON layers — unrelated variables dropped, ASPNETCORE_ kept', async () => {
     const build = await make({}, { Logging__X: '1', UNRELATED: '2', ASPNETCORE_URLS: 'u' })
       .buildLayers(project('Worker'), { environment: 'Development' });
