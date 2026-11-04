@@ -1,0 +1,38 @@
+{
+  "name": "effective-config",
+  "displayName": "Effective Config Viewer",
+  "description": "Shows the merged .NET appsettings configuration for a chosen environment.",
+  "version": "0.0.1",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {},
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "test:unit": "vitest run",
+    "test:integration": "vscode-test",
+    "lint": "tsc --noEmit",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "jsonc-parser": "3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "@types/vscode": "~1.85.0",
+    "@vscode/test-cli": "0.0.15",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.1.0",
+    "esbuild": "0.28.2",
+    "jsdom": "30.1.3",
+    "typescript": "7.0.2",
+    "vitest": "4.1.12"
+  }
+}
