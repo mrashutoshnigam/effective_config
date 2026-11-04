@@ -13,6 +13,7 @@ const extensionOptions = {
   format: 'cjs',
   target: 'node18',
   external: ['vscode'],
+  mainFields: ['module', 'main'],
   sourcemap: true,
 };
 

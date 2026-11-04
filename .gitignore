@@ -4,3 +4,4 @@ out/
 .vscode-test/
 *.vsix
 .superpowers/
+test/fixtures/.tmp-*/

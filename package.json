@@ -77,7 +77,8 @@
     "test:unit": "vitest run",
     "test:integration": "vscode-test",
     "lint": "tsc --noEmit",
-    "package": "vsce package"
+    "package": "vsce package",
+    "pretest:integration": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\" && npm run build && tsc -p test/integration"
   },
   "dependencies": {
     "jsonc-parser": "3.3.1"
