@@ -83,3 +83,9 @@ describe('toEnvLines', () => {
     expect(toEnvLines([], val)).toBe('');
   });
 });
+
+describe('toEnvLines separator', () => {
+  it('env lines joined with given separator — A:B=1 with "_" becomes A_B=1', () => {
+    expect(toEnvLines([E('A:B', '1')], val, '_')).toBe('A_B=1');
+  });
+});

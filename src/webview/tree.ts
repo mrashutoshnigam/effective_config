@@ -135,16 +135,19 @@ function chain(node: ViewNode, ctx: BodyContext): HTMLElement {
   });
   details.append(el('summary', undefined, `${node.overridden.length} overridden`));
   const list = el('ul');
-  const add = (label: string, locationId: string | undefined, text: string): void => {
+  const add = (label: string, locationId: string | undefined, text: string, references?: string[]): void => {
     const li = el('li');
     li.append(sourceLabel(label, locationId, post), document.createTextNode(' '), el('span', 'chain-value', text));
+    if (references && references.length > 0) {
+      li.append(document.createTextNode(' '), el('span', 'chain-uses', `uses: ${references.join(', ')}`));
+    }
     list.append(li);
   };
   if (node.winner) {
-    add(node.winner.layerLabel, node.winner.locationId, chainText(node.value, node.masked));
+    add(node.winner.layerLabel, node.winner.locationId, chainText(node.value, node.masked), node.winner.references);
   }
   for (const o of [...node.overridden].reverse()) {
-    add(o.layerLabel, o.locationId, chainText(o.value, o.masked));
+    add(o.layerLabel, o.locationId, chainText(o.value, o.masked), o.references);
   }
   details.append(list);
   return details;

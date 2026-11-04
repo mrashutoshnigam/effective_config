@@ -1,5 +1,5 @@
 /** The kind of configuration source a {@link Layer} was read from. */
-export type LayerKind = 'json' | 'userSecrets' | 'envOs' | 'envProfile' | 'commandLine';
+export type LayerKind = 'json' | 'userSecrets' | 'envOs' | 'envProfile' | 'commandLine' | 'dotenv' | 'envFile';
 
 /** A position inside a source file. `line` and `column` are 0-based. */
 export interface SourceLocation {
@@ -19,6 +19,8 @@ export interface LayerEntry {
   value: string | null;
   /** Where the value token lives in the source file, when known. */
   location?: SourceLocation;
+  /** Keys (`:` form) this value was expanded from, when it contains references to other keys. */
+  references?: string[];
 }
 
 /** One configuration source (file, env vars, command line) with its flattened entries. */
@@ -59,8 +61,10 @@ export interface Contribution {
   value: string | null;
   /** Source location of the contribution, when known. */
   location?: SourceLocation;
-  /** True when the value is sensitive (secret layer or key matching a mask pattern). */
+  /** True when the value is sensitive (secret layer, key matching a mask pattern, or expanded from a sensitive key). */
   sensitive: boolean;
+  /** Keys (`:` form) the value was expanded from; key names only, never values. */
+  references?: string[];
 }
 
 /** The merged result for one key: the winning contribution and those it overrode. */

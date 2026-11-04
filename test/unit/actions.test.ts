@@ -76,3 +76,13 @@ describe('exportText', () => {
     expect(exportText([], 'env', false)).toBe('');
   });
 });
+
+describe('separator parameter', () => {
+  it('envVarName uses the given separator — A:B with "_" copies A_B', () => {
+    expect(copyText([M('A:B', '1')], 'A:B', 'envVarName', new Set(), '_')).toBe('A_B');
+  });
+
+  it('exportText env uses the given separator — A:B=1 exports as A_B=1', () => {
+    expect(exportText([M('A:B', '1')], 'env', false, '_')).toBe('A_B=1');
+  });
+});

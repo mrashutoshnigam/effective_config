@@ -41,15 +41,20 @@ export function toNestedJson(entries: MergedEntry[], valueOf: (e: MergedEntry) =
 }
 
 /**
- * Exports merged entries as `NAME=value` environment-variable lines (`:` becomes `__`).
+ * Exports merged entries as `NAME=value` environment-variable lines (`:` becomes the separator).
  * Entries with a `null` value (empty sections) are skipped; a `null` result from `valueOf` yields an empty value.
  * @param entries Merged entries.
  * @param valueOf Supplies the value to emit for an entry (e.g. applies masking).
+ * @param separator Separator replacing `:` in names; defaults to `__`.
  * @returns Lines joined with `\n`, without a trailing newline.
  */
-export function toEnvLines(entries: MergedEntry[], valueOf: (e: MergedEntry) => string | null): string {
+export function toEnvLines(
+  entries: MergedEntry[],
+  valueOf: (e: MergedEntry) => string | null,
+  separator = '__',
+): string {
   return entries
     .filter(e => e.value !== null)
-    .map(e => `${keyToEnvVarName(e.key)}=${valueOf(e) ?? ''}`)
+    .map(e => `${keyToEnvVarName(e.key, separator)}=${valueOf(e) ?? ''}`)
     .join('\n');
 }

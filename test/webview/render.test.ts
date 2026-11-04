@@ -230,6 +230,16 @@ describe('render', () => {
     expect(post).toHaveBeenCalledWith({ type: 'openSource', locationId: 'm1' });
   });
 
+  it("chain shows 'uses: DB_PASSWORD' after the value, for winner and overridden", () => {
+    const node = leaf('A:B', 'win', {
+      winner: { layerLabel: 'f', references: ['DB_PASSWORD'] },
+      overridden: [{ layerLabel: 'base', value: 'old', masked: false, references: ['X', 'Y'] }],
+    });
+    const { el } = setup(makeState([section('A', [node])]));
+    const items = [...el.querySelectorAll('[data-path="A:B"] details li')].map((li) => li.textContent);
+    expect(items).toEqual(['f win uses: DB_PASSWORD', 'base old uses: X, Y']);
+  });
+
   it('shows the label line verbatim', () => {
     const { el } = setup(makeState([]));
     expect(el.querySelector('.label')!.textContent).toBe('Simulated — default WebApplication.CreateBuilder order');

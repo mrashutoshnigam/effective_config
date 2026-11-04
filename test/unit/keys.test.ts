@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeKey, compareKeys, envVarNameToKey, keyToEnvVarName, splitKey, isNumericSegment } from '../../src/engine/keys';
+import { normalizeKey, compareKeys, envVarNameToKey, delimitedNameToKey, keyToEnvVarName, splitKey, isNumericSegment } from '../../src/engine/keys';
 
 describe('keys', () => {
   it('envVarNameToKey converts "__" to ":" — Logging__LogLevel__Default becomes Logging:LogLevel:Default', () => {
@@ -78,5 +78,21 @@ describe('isNumericSegment', () => {
 
   it('rejects names, empty and out-of-int32-range values — a, "", 2147483648 are not numeric', () => {
     expect(['a', '', '2147483648', '1.5'].map(isNumericSegment)).toEqual([false, false, false, false]);
+  });
+});
+
+describe('separators', () => {
+  it('keyToEnvVarName uses the given separator — A:B with "_" becomes A_B, default stays A__B', () => {
+    expect(keyToEnvVarName('A:B', '_')).toBe('A_B');
+    expect(keyToEnvVarName('A:B')).toBe('A__B');
+  });
+
+  it('delimitedNameToKey splits on the delimiter — DB__HOST with "__" becomes DB:HOST', () => {
+    expect(delimitedNameToKey('DB__HOST', '__')).toBe('DB:HOST');
+    expect(delimitedNameToKey('DB_HOST', '_')).toBe('DB:HOST');
+  });
+
+  it('delimitedNameToKey with an empty delimiter returns the name unchanged', () => {
+    expect(delimitedNameToKey('DB__HOST', '')).toBe('DB__HOST');
   });
 });

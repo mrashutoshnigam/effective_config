@@ -119,3 +119,17 @@ describe('RevealState', () => {
     expect(rs.current([]).size).toBe(0);
   });
 });
+
+describe('toViewModel references', () => {
+  it('references passed through for winner and overridden — key names only, omitted when absent', () => {
+    const entry = M('A', 'v', 'f', false, ['old']);
+    entry.winner.references = ['DB_PASSWORD'];
+    entry.overridden[0].references = ['X', 'Y'];
+    const node = toViewModel(buildTree([entry]), new Set(), new Map()).children[0];
+    expect(node.winner!.references).toEqual(['DB_PASSWORD']);
+    expect(node.overridden[0].references).toEqual(['X', 'Y']);
+    const plain = toViewModel(buildTree([M('B', 'v', 'f', false, ['o'])]), new Set(), new Map()).children[0];
+    expect('references' in plain.winner!).toBe(false);
+    expect('references' in plain.overridden[0]).toBe(false);
+  });
+});

@@ -112,4 +112,69 @@ describe('mergeLayers', () => {
     );
     expect(r.map((e) => e.key)).toEqual(['A', 'A:B', 'Arr:2', 'Arr:10', 'Arr:x', 'b']);
   });
+
+  describe('references', () => {
+    /** Builds a layer from full entries (allows references). */
+    function R(id: string, entries: LayerEntry[], sensitive = false): Layer {
+      return { id, label: id.toUpperCase(), kind: 'dotenv', sensitive, entries };
+    }
+
+    it('value expanded from a pattern-matched key is sensitive — DATABASE_URL masked', () => {
+      const r = mergeLayers(
+        [R('f', [{ key: 'DATABASE_URL', value: 'pg://u:pw@h', references: ['DB_PASSWORD'] }, { key: 'DB_PASSWORD', value: 'pw' }])],
+        ['*Password*'],
+      );
+      expect(r.find((e) => e.key === 'DATABASE_URL')!.sensitive).toBe(true);
+    });
+
+    it('transitive reference to a sensitive-layer key is sensitive — A -> B -> C(secret layer) makes A and B sensitive', () => {
+      const r = mergeLayers(
+        [
+          R('s', [{ key: 'C', value: 'x' }], true),
+          R('f', [{ key: 'A', value: 'ab', references: ['B'] }, { key: 'B', value: 'b', references: ['C'] }]),
+        ],
+        [],
+      );
+      expect(r.find((e) => e.key === 'A')!.sensitive).toBe(true);
+      expect(r.find((e) => e.key === 'B')!.sensitive).toBe(true);
+    });
+
+    it('reference cycle terminates — A<->B not sensitive', () => {
+      const r = mergeLayers(
+        [R('f', [{ key: 'A', value: '1', references: ['B'] }, { key: 'B', value: '2', references: ['A'] }])],
+        [],
+      );
+      expect(r.map((e) => e.sensitive)).toEqual([false, false]);
+    });
+
+    it('reference cycle with a sensitive member marks the whole cycle sensitive', () => {
+      const r = mergeLayers(
+        [R('f', [{ key: 'A', value: '1', references: ['B'] }, { key: 'B', value: '2', references: ['A', 'Secret'] }])],
+        ['Secret'],
+      );
+      expect(r.map((e) => e.sensitive)).toEqual([true, true]);
+    });
+
+    it('references match case-insensitively and unknown references are ignored', () => {
+      const r = mergeLayers(
+        [R('f', [{ key: 'A', value: '1', references: ['db_password', 'missing'] }, { key: 'DB_PASSWORD', value: 'p' }])],
+        [],
+      );
+      expect(r.find((e) => e.key === 'A')!.sensitive).toBe(false);
+      const r2 = mergeLayers(
+        [R('s', [{ key: 'DB_PASSWORD', value: 'p' }], true), R('f', [{ key: 'A', value: '1', references: ['db_password'] }])],
+        [],
+      );
+      expect(r2.find((e) => e.key === 'A')!.sensitive).toBe(true);
+    });
+
+    it('references copied onto contributions — winner and overridden keep their own references', () => {
+      const r = mergeLayers(
+        [R('a', [{ key: 'K', value: '1', references: ['X'] }]), R('b', [{ key: 'K', value: '2', references: ['Y', 'Z'] }])],
+        [],
+      );
+      expect(r[0].winner.references).toEqual(['Y', 'Z']);
+      expect(r[0].overridden[0].references).toEqual(['X']);
+    });
+  });
 });

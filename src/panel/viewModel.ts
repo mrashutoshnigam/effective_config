@@ -46,12 +46,17 @@ export function toViewModel(
     };
     if (entry) {
       view.value = masked ? null : entry.value;
-      view.winner = { layerLabel: entry.winner.layerLabel, locationId: register(entry.winner.location) };
+      view.winner = {
+        layerLabel: entry.winner.layerLabel,
+        locationId: register(entry.winner.location),
+        ...(entry.winner.references ? { references: [...entry.winner.references] } : {}),
+      };
       view.overridden = entry.overridden.map((c: Contribution) => ({
         layerLabel: c.layerLabel,
         value: masked ? null : c.value,
         masked,
         locationId: register(c.location),
+        ...(c.references ? { references: [...c.references] } : {}),
       }));
     }
     view.children = node.children.map(convert);

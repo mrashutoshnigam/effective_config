@@ -15,9 +15,9 @@ export interface ViewNode {
   /** True when the value is considered sensitive. */
   sensitive: boolean;
   /** The winning source. */
-  winner?: { layerLabel: string; locationId?: string };
+  winner?: { layerLabel: string; locationId?: string; references?: string[] };
   /** Overridden contributions, lowest priority first. */
-  overridden: { layerLabel: string; value: string | null; masked: boolean; locationId?: string }[];
+  overridden: { layerLabel: string; value: string | null; masked: boolean; locationId?: string; references?: string[] }[];
   /** True when the children are array items. */
   isArray: boolean;
   /** Oddity flags. */

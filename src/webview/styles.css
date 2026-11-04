@@ -144,6 +144,10 @@ span.badge {
   font-family: var(--vscode-editor-font-family);
 }
 
+.chain-uses {
+  font-style: italic;
+}
+
 .empty {
   padding: 12px 0;
   color: var(--vscode-descriptionForeground);

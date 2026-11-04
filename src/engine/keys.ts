@@ -45,21 +45,32 @@ export function compareKeys(a: string, b: string): number {
 }
 
 /**
+ * Converts a delimited name to a configuration key (the delimiter becomes `:`).
+ * @param name Name, e.g. `DB__HOST`.
+ * @param delimiter Delimiter to split on; an empty delimiter leaves the name unchanged.
+ * @returns The configuration key, e.g. `DB:HOST`.
+ */
+export function delimitedNameToKey(name: string, delimiter: string): string {
+  return delimiter === '' ? name : name.split(delimiter).join(':');
+}
+
+/**
  * Converts an environment variable name to a configuration key (`__` becomes `:`).
  * @param name Environment variable name, e.g. `Logging__LogLevel__Default`.
  * @returns The configuration key, e.g. `Logging:LogLevel:Default`.
  */
 export function envVarNameToKey(name: string): string {
-  return name.split('__').join(':');
+  return delimitedNameToKey(name, '__');
 }
 
 /**
- * Converts a configuration key to an environment variable name (`:` becomes `__`).
+ * Converts a configuration key to an environment variable name (`:` becomes the separator).
  * @param key Configuration key, e.g. `A:B:0`.
+ * @param separator Separator replacing `:`; defaults to `__`.
  * @returns The environment variable name, e.g. `A__B__0`.
  */
-export function keyToEnvVarName(key: string): string {
-  return key.split(':').join('__');
+export function keyToEnvVarName(key: string, separator = '__'): string {
+  return key.split(':').join(separator);
 }
 
 /**

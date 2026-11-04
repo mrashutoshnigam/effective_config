@@ -11,6 +11,7 @@ const MASKED_VALUE = '***';
  * @param path Key path of the entry (case-insensitive).
  * @param what Which representation to copy.
  * @param revealed Key paths whose sensitive values are currently revealed (case-insensitive).
+ * @param separator Separator used for env var names; defaults to `__`.
  * @returns The text, or `undefined` when the value is masked (sensitive and not revealed) or unknown.
  * `keyPath` and `envVarName` also work for paths without an entry (section rows) and are built from `path`.
  */
@@ -19,6 +20,7 @@ export function copyText(
   path: string,
   what: 'value' | 'keyPath' | 'envVarName',
   revealed: Set<string>,
+  separator = '__',
 ): string | undefined {
   const norm = normalizeKey(path);
   const entry = entries.find((e) => normalizeKey(e.key) === norm);
@@ -27,7 +29,7 @@ export function copyText(
       case 'keyPath':
         return path;
       case 'envVarName':
-        return keyToEnvVarName(path);
+        return keyToEnvVarName(path, separator);
       case 'value':
         return undefined;
     }
@@ -36,7 +38,7 @@ export function copyText(
     case 'keyPath':
       return entry.key;
     case 'envVarName':
-      return keyToEnvVarName(entry.key);
+      return keyToEnvVarName(entry.key, separator);
     case 'value': {
       if (entry.sensitive && ![...revealed].some((r) => normalizeKey(r) === norm)) {
         return undefined;
@@ -52,9 +54,15 @@ export function copyText(
  * @param entries Merged entries.
  * @param format `json` for nested JSON, `env` for `NAME=value` lines.
  * @param revealAll True to include sensitive values in plain text.
+ * @param separator Separator used for env var names in `env` format; defaults to `__`.
  * @returns The export text.
  */
-export function exportText(entries: MergedEntry[], format: 'json' | 'env', revealAll: boolean): string {
+export function exportText(
+  entries: MergedEntry[],
+  format: 'json' | 'env',
+  revealAll: boolean,
+  separator = '__',
+): string {
   const valueOf = (e: MergedEntry): string | null => (e.sensitive && !revealAll ? MASKED_VALUE : e.value);
-  return format === 'json' ? toNestedJson(entries, valueOf) : toEnvLines(entries, valueOf);
+  return format === 'json' ? toNestedJson(entries, valueOf) : toEnvLines(entries, valueOf, separator);
 }
