@@ -10,12 +10,21 @@ export interface JsonLayerParseResult {
 }
 
 /**
+ * Removes a leading UTF-8 byte order mark, if present.
+ * @param text File contents.
+ * @returns The text without a leading BOM.
+ */
+export function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+/**
  * Converts an offset into a 0-based line/column pair.
  * @param text Text the offset refers to.
  * @param offset 0-based character offset.
  * @returns 0-based `line` and `column`.
  */
-function getLineCol(text: string, offset: number): { line: number; column: number } {
+export function getLineCol(text: string, offset: number): { line: number; column: number } {
   let line = 0;
   let lineStart = 0;
   for (let i = 0; i < offset; i++) {
@@ -39,9 +48,7 @@ function getLineCol(text: string, offset: number): { line: number; column: numbe
  * an empty file yields no entries and an `info` diagnostic.
  */
 export function parseJsonLayer(text: string, filePath: string): JsonLayerParseResult {
-  if (text.charCodeAt(0) === 0xfeff) {
-    text = text.slice(1);
-  }
+  text = stripBom(text);
   const loc = (offset: number): SourceLocation => ({ filePath, ...getLineCol(text, offset) });
 
   if (text.trim() === '') {
