@@ -41,7 +41,7 @@ function section(path: string, children: ViewNode[], extra: Partial<ViewNode> = 
 /** Builds a complete view state around the given top-level nodes. */
 function makeState(children: ViewNode[], extra: Partial<ViewState> = {}): ViewState {
   return {
-    projects: [{ id: 'p1', name: 'Api' }],
+    projects: [{ id: 'p1', name: 'Api', kind: 'dotnet' }],
     projectId: 'p1',
     profiles: ['https', 'iis'],
     profile: 'https',
@@ -275,13 +275,26 @@ describe('render', () => {
     expect(setup(makeState([])).el.querySelector('select[data-role=project]')).toBeNull();
     const state = makeState([], {
       projects: [
-        { id: 'p1', name: 'Api' },
-        { id: 'p2', name: 'Web' },
+        { id: 'p1', name: 'Api', kind: 'dotnet' },
+        { id: 'p2', name: 'Web', kind: 'python' },
       ],
     });
     const { el, post } = setup(state);
     choose(el.querySelector('select[data-role=project]') as HTMLSelectElement, 'p2');
     expect(post).toHaveBeenCalledWith({ type: 'select', projectId: 'p2' });
+  });
+
+  it("project options show kind tag — '[Python] PyApp' and '[.NET] Api'", () => {
+    const { el } = setup(
+      makeState([], {
+        projects: [
+          { id: 'p1', name: 'Api', kind: 'dotnet' },
+          { id: 'p2', name: 'PyApp', kind: 'python' },
+        ],
+      }),
+    );
+    const sel = el.querySelector('select[data-role=project]') as HTMLSelectElement;
+    expect([...sel.options].map((o) => o.textContent)).toEqual(['[.NET] Api', '[Python] PyApp']);
   });
 
   it('environment select posts the environment; Customâ€¦ shows input and Enter posts trimmed text', () => {

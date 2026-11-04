@@ -29,7 +29,7 @@ export interface ViewNode {
 /** The complete view state the host posts to the webview. */
 export interface ViewState {
   /** Projects that can be switched to. */
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; kind: 'dotnet' | 'python' }[];
   /** The shown project's id. */
   projectId: string;
   /** Available launch profile names. */

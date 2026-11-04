@@ -8,7 +8,7 @@ import type { ProjectInfo } from '../../src/provider';
 const FIXTURES = path.resolve(__dirname, '../fixtures');
 const project = (name: string): ProjectInfo => {
   const dir = path.join(FIXTURES, name);
-  return { id: name, name, dir, projectFile: path.join(dir, `${name}.csproj`) };
+  return { id: name, name, dir, projectFile: path.join(dir, `${name}.csproj`), kind: 'dotnet' };
 };
 
 const SECRETS_PATH = 'C:\\A\\Microsoft\\UserSecrets\\test-webapp-0001\\secrets.json';

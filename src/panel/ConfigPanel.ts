@@ -6,31 +6,27 @@ import * as vscode from 'vscode';
 import { DotnetProvider } from '../dotnet/dotnetProvider';
 import { DEFAULT_JSON_LAYERS } from '../dotnet/environments';
 import { nodeFileSystem } from '../dotnet/fileSystem';
+import { DEFAULT_ENV_FILES, DEFAULT_ENV_NAME_VARIABLES } from '../python/environments';
+import { PythonProvider } from '../python/pythonProvider';
 import { normalizeKey } from '../engine/keys';
 import { copyText, exportText } from './actions';
 import { mergeLayers } from '../engine/merge';
 import { buildTree } from '../engine/tree';
 import type { Diagnostic, MergedEntry, SourceLocation } from '../engine/types';
-import type { ProjectInfo, Selection } from '../provider';
+import type { ConfigProvider, ProjectDescription, ProjectInfo, Selection } from '../provider';
 import type { HostMessage, ViewNode, ViewState, WebviewMessage } from './messages';
 import { nextSelection } from './selection';
 import { RevealState, toViewModel } from './viewModel';
 import { watchTargetKey, watchTargetsFor, type WatchTarget } from './watchTargets';
 
 /** Default mask patterns (glob, case-insensitive). */
-const DEFAULT_MASK_PATTERNS = ['*Password*', '*Secret*', '*Key*', 'ConnectionStrings:*'];
-
-/** Label shown in the UI describing the simulated merge order. */
-const MERGE_LABEL = 'Simulated — default WebApplication.CreateBuilder order';
+const DEFAULT_MASK_PATTERNS = ['*Password*', '*Secret*', '*Key*', '*TOKEN*', 'ConnectionStrings:*'];
 
 /** Delay in milliseconds before a file change triggers a re-render. */
 const REFRESH_DEBOUNCE_MS = 200;
 
 /** The view type of the configuration webview panel. */
 const VIEW_TYPE = 'effectiveConfig';
-
-/** Glob (relative to the project folder) of files whose creation or change refreshes the view, so new environments show up. */
-const PROJECT_SETTINGS_GLOB = 'appsettings*.json';
 
 /** The export choices offered by the Export quick pick. */
 const EXPORT_CHOICES: { label: string; format: 'json' | 'env'; revealAll: boolean }[] = [
@@ -107,6 +103,8 @@ export class ConfigPanel {
   private locations = new Map<string, SourceLocation>();
   private entries: MergedEntry[] = [];
   private selection: Selection = { environment: 'Development' };
+  /** Description of the shown project from the latest render; supplies label, separator and watch globs. */
+  private description?: ProjectDescription;
   private renderCounter = 0;
   private disposed = false;
   private watchers: vscode.Disposable[] = [];
@@ -216,9 +214,21 @@ export class ConfigPanel {
     return `Effective Config: ${project.name}`;
   }
 
-  /** Builds the provider from the current settings. */
-  private createProvider(): DotnetProvider {
+  /** Builds the provider for a project's kind from the current settings. */
+  private createProvider(project: ProjectInfo = this.project): ConfigProvider {
     const config = vscode.workspace.getConfiguration('effectiveConfig');
+    if (project.kind === 'python') {
+      return new PythonProvider({
+        fs: nodeFileSystem,
+        osEnv: osEnvironment(),
+        workspaceRoot: vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project.dir))?.uri.fsPath ?? project.dir,
+        envFiles: config.get<string[]>('python.envFiles') ?? DEFAULT_ENV_FILES,
+        fileOverridesOs: config.get<boolean>('python.fileOverridesOs') ?? false,
+        envPrefixes: config.get<string[]>('python.envPrefixes') ?? [],
+        nestedDelimiter: config.get<string>('python.nestedDelimiter') ?? '__',
+        environmentVariables: config.get<string[]>('python.environmentVariables') ?? DEFAULT_ENV_NAME_VARIABLES,
+      });
+    }
     return new DotnetProvider({
       fs: nodeFileSystem,
       osEnv: osEnvironment(),
@@ -308,7 +318,7 @@ export class ConfigPanel {
     if (!known) {
       return;
     }
-    const text = copyText(this.entries, keyPath, what, this.reveals.current(this.entries));
+    const text = copyText(this.entries, keyPath, what, this.reveals.current(this.entries), this.description?.envVarSeparator);
     if (text === undefined) {
       void vscode.window.showInformationMessage('Reveal the value before copying');
       return;
@@ -332,7 +342,7 @@ export class ConfigPanel {
         return;
       }
     }
-    const content = exportText(this.entries, format, revealAll);
+    const content = exportText(this.entries, format, revealAll, this.description?.envVarSeparator);
     const doc = await vscode.workspace.openTextDocument({ content, language: format === 'json' ? 'json' : 'properties' });
     await vscode.window.showTextDocument(doc, { preview: false });
   }
@@ -367,7 +377,9 @@ export class ConfigPanel {
    */
   private syncWatchers(paths: string[]): void {
     const targets: WatchTarget[] = watchTargetsFor(paths, isDirectory);
-    targets.push({ base: this.project.dir, pattern: PROJECT_SETTINGS_GLOB });
+    for (const pattern of this.description?.watchGlobs ?? []) {
+      targets.push({ base: this.project.dir, pattern });
+    }
     const next = new Set(targets.map(watchTargetKey));
     if (next.size === this.watchedKeys.size && [...next].every((k) => this.watchedKeys.has(k))) {
       return;
@@ -387,7 +399,6 @@ export class ConfigPanel {
   /** Applies a selection change (project, profile, environment) and re-renders; state is committed only on success. */
   private async handleSelect(message: Extract<WebviewMessage, { type: 'select' }>): Promise<void> {
     try {
-      const provider = this.createProvider();
       let target = this.project;
       if (message.projectId !== undefined && message.projectId !== this.project.id) {
         const requested = this.projects.find((p) => p.id === message.projectId);
@@ -401,6 +412,7 @@ export class ConfigPanel {
           target = requested;
         }
       }
+      const provider = this.createProvider(target);
       const projectChanged = target !== this.project;
       const needsDescription = projectChanged || (message.profile !== undefined && message.profile !== null);
       const description = needsDescription ? await provider.describe(target) : undefined;
@@ -413,6 +425,9 @@ export class ConfigPanel {
         ConfigPanel.panels.set(target.id, this);
         this.panel.title = ConfigPanel.titleFor(target);
         this.reveals = new RevealState();
+      }
+      if (description) {
+        this.description = description;
       }
       this.selection = selection;
       this.selectionReady = true;
@@ -446,7 +461,7 @@ export class ConfigPanel {
    */
   async render(): Promise<void> {
     const token = ++this.renderCounter;
-    const projectsInfo = this.projects.map((p) => ({ id: p.id, name: p.name }));
+    const projectsInfo = this.projects.map((p) => ({ id: p.id, name: p.name, kind: p.kind }));
     let state: ViewState;
     let locations = new Map<string, SourceLocation>();
     let entries: MergedEntry[] = [];
@@ -454,6 +469,7 @@ export class ConfigPanel {
     try {
       const provider = this.createProvider();
       const description = await provider.describe(this.project);
+      this.description = description;
       if (!this.selectionReady) {
         this.selection = { ...description.defaultSelection };
         this.selectionReady = true;
@@ -471,7 +487,7 @@ export class ConfigPanel {
         environment: this.selection.environment,
         root,
         diagnostics: build.diagnostics,
-        label: MERGE_LABEL,
+        label: description.mergeLabel,
       };
     } catch (err) {
       locations = new Map();
@@ -489,7 +505,7 @@ export class ConfigPanel {
         environment: this.selection.environment,
         root: ConfigPanel.emptyRoot(),
         diagnostics: [diagnostic],
-        label: MERGE_LABEL,
+        label: this.description?.mergeLabel ?? '',
       };
     }
     if (this.disposed || token !== this.renderCounter) {

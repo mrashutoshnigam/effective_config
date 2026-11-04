@@ -40,7 +40,7 @@ function section(path: string, children: ViewNode[], extra: Partial<ViewNode> = 
 /** Builds a state around top-level nodes. */
 function makeState(children: ViewNode[]): ViewState {
   return {
-    projects: [{ id: 'p1', name: 'Api' }],
+    projects: [{ id: 'p1', name: 'Api', kind: 'dotnet' }],
     projectId: 'p1',
     profiles: [],
     environments: ['Development'],

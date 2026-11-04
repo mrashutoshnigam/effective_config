@@ -3,8 +3,8 @@ import { findOwningProject } from '../../src/dotnet/projectDiscovery';
 import type { ProjectInfo } from '../../src/provider';
 
 /** Builds a project rooted at `dir`. */
-function P(dir: string): ProjectInfo {
-  return { id: `${dir}/x.csproj`, name: 'x', dir, projectFile: `${dir}/x.csproj` };
+function P(dir: string, kind: 'dotnet' | 'python' = 'dotnet'): ProjectInfo {
+  return { id: `${dir}/x.${kind}`, name: 'x', dir, projectFile: `${dir}/x.${kind}`, kind };
 }
 
 describe('findOwningProject', () => {
@@ -30,5 +30,26 @@ describe('findOwningProject', () => {
 
   it('returns undefined for an empty project list', () => {
     expect(findOwningProject('/r/a.json', [])).toBeUndefined();
+  });
+
+  it('same-folder .NET and Python projects — .env prefers python, appsettings prefers dotnet', () => {
+    const projects = [P('/r/app', 'dotnet'), P('/r/app', 'python')];
+    expect(findOwningProject('/r/app/.env', projects, 'python')?.kind).toBe('python');
+    expect(findOwningProject('/r/app/appsettings.json', projects, 'dotnet')?.kind).toBe('dotnet');
+    expect(findOwningProject('/r/app/.env', [...projects].reverse(), 'python')?.kind).toBe('python');
+  });
+
+  it('deeper project wins over a preferred-kind project in a parent folder', () => {
+    const projects = [P('/r', 'python'), P('/r/app', 'dotnet')];
+    expect(findOwningProject('/r/app/.env', projects, 'python')?.kind).toBe('dotnet');
+  });
+
+  it('falls back to the only project at the depth when the preferred kind is absent', () => {
+    expect(findOwningProject('/r/app/.env', [P('/r/app', 'dotnet')], 'python')?.kind).toBe('dotnet');
+  });
+
+  it('keeps the first project at equal depth when no preferred kind is given', () => {
+    const projects = [P('/r/app', 'python'), P('/r/app', 'dotnet')];
+    expect(findOwningProject('/r/app/x', projects)?.kind).toBe('python');
   });
 });

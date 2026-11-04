@@ -105,13 +105,13 @@ describe('Effective Config panel (integration)', () => {
   });
 
   it('show command on WebApp appsettings.json opens panel with Development and Trace log level', async () => {
-    const s = await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId.includes('WebApp'));
+    const s = await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId === fixture('WebApp/WebApp.csproj'));
     assert.strictEqual(s.environment, 'Development');
     assert.strictEqual(find(s.root, 'Logging:LogLevel:Default')!.value, 'Trace');
   });
 
   it('secret from appsettings.secrets.json is masked in panel state — masked true, value null', async () => {
-    const s = await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId.includes('WebApp'));
+    const s = await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId === fixture('WebApp/WebApp.csproj'));
     const node = find(s.root, 'ConnectionStrings:Default');
     assert.ok(node, 'ConnectionStrings:Default exists');
     assert.strictEqual(node.masked, true);
@@ -119,7 +119,7 @@ describe('Effective Config panel (integration)', () => {
   });
 
   it('reveal of a masked secret shows the fixture value, hide masks it again — value then null', async () => {
-    const webApp = (x: ViewState): boolean => x.projectId.includes('WebApp');
+    const webApp = (x: ViewState): boolean => x.projectId === fixture('WebApp/WebApp.csproj');
     await openAndGetState(api, fixture('WebApp/appsettings.json'), webApp);
     await api.sendMessage({ type: 'reveal', path: 'ConnectionStrings:Default', revealed: true });
     const revealed = find(api.getPanelState()!.root, 'ConnectionStrings:Default')!;
@@ -134,7 +134,7 @@ describe('Effective Config panel (integration)', () => {
   });
 
   it('selecting the Staging profile makes the environment follow it — profile and environment are Staging', async () => {
-    await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId.includes('WebApp'));
+    await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId === fixture('WebApp/WebApp.csproj'));
     await api.sendMessage({ type: 'select', profile: 'Staging' });
     const s = api.getPanelState()!;
     assert.strictEqual(s.profile, 'Staging');
@@ -142,7 +142,7 @@ describe('Effective Config panel (integration)', () => {
   });
 
   it('copy value on a masked node leaves the clipboard untouched — sentinel survives', async () => {
-    await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId.includes('WebApp'));
+    await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId === fixture('WebApp/WebApp.csproj'));
     const sentinel = 'sentinel-clipboard-value';
     await vscode.env.clipboard.writeText(sentinel);
     await api.sendMessage({ type: 'copy', path: 'ConnectionStrings:Default', what: 'value' });
@@ -150,7 +150,7 @@ describe('Effective Config panel (integration)', () => {
   });
 
   it('copy key path on a section row writes the section path — clipboard is Logging:LogLevel', async () => {
-    await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId.includes('WebApp'));
+    await openAndGetState(api, fixture('WebApp/appsettings.json'), (x) => x.projectId === fixture('WebApp/WebApp.csproj'));
     await vscode.env.clipboard.writeText('sentinel');
     await api.sendMessage({ type: 'copy', path: 'Logging:LogLevel', what: 'keyPath' });
     assert.strictEqual(await vscode.env.clipboard.readText(), 'Logging:LogLevel');
@@ -160,7 +160,7 @@ describe('Effective Config panel (integration)', () => {
     removeTmp();
     fs.cpSync(fixture('WebApp'), TMP_DIR, { recursive: true });
     try {
-      const s = await openAndGetState(api, path.join(TMP_DIR, 'appsettings.json'), (x) => x.projectId.startsWith(TMP_DIR));
+      const s = await openAndGetState(api, path.join(TMP_DIR, 'appsettings.json'), (x) => x.projectId === path.join(TMP_DIR, 'WebApp.csproj'));
       assert.strictEqual(find(s.root, 'Endpoints:0')!.value, 'https://dev.example.test');
 
       const devFile = path.join(TMP_DIR, 'appsettings.Development.json');
@@ -181,7 +181,7 @@ describe('Effective Config panel (integration)', () => {
     removeTmp();
     fs.cpSync(fixture('WebApp'), TMP_DIR, { recursive: true });
     try {
-      const s = await openAndGetState(api, path.join(TMP_DIR, 'appsettings.json'), (x) => x.projectId.startsWith(TMP_DIR));
+      const s = await openAndGetState(api, path.join(TMP_DIR, 'appsettings.json'), (x) => x.projectId === path.join(TMP_DIR, 'WebApp.csproj'));
       assert.ok(!s.environments.some((e) => e.toLowerCase() === 'qa'));
       fs.writeFileSync(path.join(TMP_DIR, 'appsettings.QA.json'), JSON.stringify({ Qa: { On: true } }));
       const refreshed = await waitFor(() => {
@@ -196,12 +196,43 @@ describe('Effective Config panel (integration)', () => {
   });
 
   it('Worker project shows no profile and no error diagnostics — profile undefined, Development env', async () => {
-    const s = await openAndGetState(api, fixture('Worker/appsettings.json'), (x) => x.projectId.includes('Worker'));
+    const s = await openAndGetState(api, fixture('Worker/appsettings.json'), (x) => x.projectId === fixture('Worker/Worker.csproj'));
     assert.strictEqual(s.profile, undefined);
     assert.strictEqual(s.environment, 'Development');
     assert.deepStrictEqual(
       s.diagnostics.filter((d) => d.severity === 'error'),
       [],
     );
+  });
+
+  it('show command on PyApp .env opens a python panel — label names python-dotenv and DB_PASSWORD is masked', async () => {
+    const s = await openAndGetState(api, fixture('PyApp/.env'), (x) => x.projectId === fixture('PyApp/pyproject.toml'));
+    assert.ok(s.label.includes('python-dotenv'), `label was ${s.label}`);
+    assert.strictEqual(s.projects.find((p) => p.id === s.projectId)?.kind, 'python');
+    const node = find(s.root, 'DB_PASSWORD');
+    assert.ok(node, 'DB_PASSWORD exists');
+    assert.strictEqual(node.masked, true);
+    assert.strictEqual(node.value, null);
+    assert.ok(find(s.root, 'FEATURE_FLAGS:BETA'), 'nested key from __ delimiter exists');
+  });
+
+  it('copy env var name on a python key uses the __ separator — clipboard is LOG__LEVEL', async () => {
+    await openAndGetState(api, fixture('PyApp/.env'), (x) => x.projectId === fixture('PyApp/pyproject.toml'));
+    await api.sendMessage({ type: 'copy', path: 'LOG:LEVEL', what: 'envVarName' });
+    assert.strictEqual(await vscode.env.clipboard.readText(), 'LOG__LEVEL');
+  });
+
+  it('Mixed folder — .env opens the python project and appsettings.json opens the dotnet project', async () => {
+    const py = await openAndGetState(api, fixture('Mixed/.env'), (x) => x.projectId === fixture('Mixed/pyproject.toml'));
+    assert.strictEqual(find(py.root, 'MIXED_SOURCE')!.value, 'python');
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const net = await openAndGetState(api, fixture('Mixed/appsettings.json'), (x) => x.projectId === fixture('Mixed/Mixed.csproj'));
+    assert.strictEqual(find(net.root, 'Mixed:Source')!.value, 'dotnet');
+  });
+
+  it('project switcher lists both kinds — dotnet and python projects are present', async () => {
+    const s = await openAndGetState(api, fixture('Mixed/.env'), (x) => x.projectId === fixture('Mixed/pyproject.toml'));
+    const kinds = new Set(s.projects.map((p) => p.kind));
+    assert.ok(kinds.has('dotnet') && kinds.has('python'));
   });
 });

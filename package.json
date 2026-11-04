@@ -1,7 +1,7 @@
 {
   "name": "effective-config",
   "displayName": "Effective Config Viewer",
-  "description": "Shows the merged .NET appsettings configuration for a chosen environment.",
+  "description": "Shows the merged .NET appsettings or Python .env configuration for a chosen environment.",
   "version": "0.1.0",
   "private": true,
   "icon": "media/icon.png",
@@ -25,13 +25,13 @@
       "explorer/context": [
         {
           "command": "effectiveConfig.show",
-          "when": "resourceFilename =~ /^appsettings.*\\.json$/i || resourceExtname == .csproj"
+          "when": "resourceFilename =~ /^appsettings.*\\.json$/i || resourceExtname == .csproj || resourceFilename =~ /^\\.env(\\..*)?$/i"
         }
       ],
       "editor/title": [
         {
           "command": "effectiveConfig.show",
-          "when": "resourceFilename =~ /^appsettings.*\\.json$/i",
+          "when": "resourceFilename =~ /^appsettings.*\\.json$/i || resourceFilename =~ /^\\.env(\\..*)?$/i",
           "group": "navigation"
         }
       ],
@@ -65,9 +65,54 @@
             "*Password*",
             "*Secret*",
             "*Key*",
+            "*TOKEN*",
             "ConnectionStrings:*"
           ],
           "description": "Case-insensitive glob patterns of keys whose values are masked by default (* matches any characters, including ':')."
+        },
+        "effectiveConfig.python.envFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".env",
+            ".env.{env}",
+            ".env.local",
+            ".env.{env}.local"
+          ],
+          "description": "Python env file layers, lowest priority first. {env} is replaced by the selected environment."
+        },
+        "effectiveConfig.python.fileOverridesOs": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, values from env files override OS environment variables (python-dotenv override=True). By default OS variables win."
+        },
+        "effectiveConfig.python.envPrefixes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Case-insensitive name prefixes; OS environment variables starting with one of them are shown even when no env file defines them."
+        },
+        "effectiveConfig.python.nestedDelimiter": {
+          "type": "string",
+          "default": "__",
+          "description": "Delimiter that splits environment variable names into nested key segments. Leave empty to keep keys flat."
+        },
+        "effectiveConfig.python.environmentVariables": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "APP_ENV",
+            "ENV",
+            "ENVIRONMENT",
+            "PYTHON_ENV"
+          ],
+          "description": "Names of the variables that select the active environment, in priority order."
         }
       }
     }
