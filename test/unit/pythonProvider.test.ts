@@ -35,7 +35,7 @@ describe('PythonProvider.describe', () => {
     expect(d.profiles).toEqual(['PyApp: dev', 'PyApp: prod']);
     expect(d.profileEnvironments).toEqual({ 'PyApp: dev': 'development', 'PyApp: prod': 'production' });
     expect(d.defaultSelection).toEqual({ profile: 'PyApp: dev', environment: 'development' });
-    expect(d.environments).toEqual(['development', 'staging', 'production', 'profile']); // 'profile' comes from the .env.profile fixture file
+    expect(d.environments).toEqual(['development', 'staging', 'production']);
     expect(d.watchGlobs).toEqual(['.env', '.env.*']);
     expect(d.envVarSeparator).toBe('__');
     expect(d.mergeLabel).toBe('Simulated — python-dotenv order (OS variables win)');
@@ -118,7 +118,7 @@ describe('PythonProvider.buildLayers', () => {
     expect(byId.envOs.label).toBe('Environment (OS)');
     expect(byId.envFile.label).toBe('Env file (launch.json: PyApp: dev)');
     expect(byId.envFile.kind).toBe('envFile');
-    expect(byId.envFile.filePath).toBe(path.join(PYAPP, '.env.profile'));
+    expect(byId.envFile.filePath).toBe(path.join(PYAPP, 'profile.env'));
     expect(byId.envProfile.label).toBe('Environment (launch.json: PyApp: dev)');
     expect(byId['.env'].kind).toBe('dotenv');
     expect(byId['.env'].label).toBe('.env');
@@ -161,11 +161,11 @@ describe('PythonProvider.buildLayers', () => {
   });
 
   it('expansion treats OS, envFile and profile env as one process environment — later source wins', async () => {
-    const text = '{"configurations":[{"name":"p","type":"python","env":{"X":"profile"},"envFile":"${workspaceFolder}/PyApp/.env.profile"}]}';
+    const text = '{"configurations":[{"name":"p","type":"python","env":{"X":"profile"},"envFile":"${workspaceFolder}/PyApp/profile.env"}]}';
     const fsx = overlayFs({
       [path.join(PYAPP, '.env')]: 'A=${X}-${Y}-${Z}\n',
       [LAUNCH]: text,
-      [path.join(PYAPP, '.env.profile')]: 'X=file\nY=file\n',
+      [path.join(PYAPP, 'profile.env')]: 'X=file\nY=file\n',
     });
     const b = await make({ fs: fsx, osEnv: { X: 'os', Y: 'os', Z: 'os' } })
       .buildLayers(project(), { profile: 'p', environment: 'development' });
@@ -173,12 +173,49 @@ describe('PythonProvider.buildLayers', () => {
   });
 
   it('envFile entries expand against OS then themselves', async () => {
-    const text = '{"configurations":[{"name":"p","type":"python","envFile":"${workspaceFolder}/PyApp/.env.profile"}]}';
-    const fsx = overlayFs({ [LAUNCH]: text, [path.join(PYAPP, '.env.profile')]: 'BASE=b\nFULL=${BASE}-${HOME_X}\n' });
+    const text = '{"configurations":[{"name":"p","type":"python","envFile":"${workspaceFolder}/PyApp/profile.env"}]}';
+    const fsx = overlayFs({ [LAUNCH]: text, [path.join(PYAPP, 'profile.env')]: 'BASE=b\nFULL=${BASE}-${HOME_X}\n' });
     const b = await make({ fs: fsx, osEnv: { HOME_X: 'h' } }).buildLayers(project(), { profile: 'p', environment: 'development' });
     const file = b.layers.find((l) => l.id === 'envFile');
     expect(file?.entries.map((e) => [e.key, e.value])).toEqual([['BASE', 'b'], ['FULL', 'b-h']]);
     expect(file?.entries[1].references).toEqual(['BASE', 'HOME_X']);
+  });
+
+  const DEFAULT_MASKS = ['*Password*', '*Secret*', '*Key*', '*TOKEN*', 'ConnectionStrings:*'];
+  const sensitiveKeys = (layers: Parameters<typeof mergeLayers>[0]): string[] =>
+    mergeLayers(layers, DEFAULT_MASKS).filter((e) => e.sensitive).map((e) => e.key);
+
+  it('value expanded from a sensitive envFile layer is sensitive — Y=${X} with X in secrets.env', async () => {
+    const text = '{"configurations":[{"name":"p","type":"python","envFile":"${workspaceFolder}/PyApp/secrets.env"}]}';
+    const b = await make({ fs: overlayFs({
+      [LAUNCH]: text, [path.join(PYAPP, 'secrets.env')]: 'X=1\n', [path.join(PYAPP, '.env')]: 'Y=${X}\nZ=plain\n',
+    }) }).buildLayers(project(), { profile: 'p', environment: 'development' });
+    const keys = sensitiveKeys(b.layers);
+    expect(keys).toContain('Y');
+    expect(keys).toContain('X');
+    expect(keys).not.toContain('Z');
+  });
+
+  it('taint is transitive — A=${DATABASE_URL} is sensitive because DATABASE_URL uses DB_PASSWORD', async () => {
+    const b = await make({ fs: overlayFs({ [path.join(PYAPP, '.env.local')]: 'A=${DATABASE_URL}\n' }) })
+      .buildLayers(project(), NO_PROFILE);
+    expect(sensitiveKeys(b.layers)).toEqual(expect.arrayContaining(['DATABASE_URL', 'A']));
+  });
+
+  it('OS-only referenced secret taints the value without entering the OS layer — X=${AWS_SECRET_ACCESS_KEY}', async () => {
+    const b = await make({
+      fs: overlayFs({ [path.join(PYAPP, '.env')]: 'X=${AWS_SECRET_ACCESS_KEY}\n' }),
+      osEnv: { AWS_SECRET_ACCESS_KEY: 'os-secret' },
+    }).buildLayers(project(), NO_PROFILE);
+    expect(sensitiveKeys(b.layers)).toContain('X');
+    expect(b.layers.find((l) => l.id === 'envOs')).toBeUndefined();
+    expect(b.layers[0].entries[0].value).toBe('os-secret');
+  });
+
+  it('expansion lookup is case-insensitive — ${db_host} resolves DB_HOST', async () => {
+    const b = await make({ fs: overlayFs({ [path.join(PYAPP, '.env')]: 'DB_HOST=h\nU=${db_host}\n' }) })
+      .buildLayers(project(), NO_PROFILE);
+    expect(b.layers[0].entries.find((e) => e.key === 'U')?.value).toBe('h');
   });
 
   it('launch.json with non-python config ignored and missing envFile warns', async () => {
@@ -280,7 +317,7 @@ describe('PythonProvider.buildLayers', () => {
     expect(b.watchPaths).toEqual(expect.arrayContaining([
       path.join(PYAPP, '.env'), path.join(PYAPP, '.env.development'), path.join(PYAPP, '.env.local'),
       path.join(PYAPP, '.env.development.local'), LAUNCH,
-      path.join(PYAPP, '.env.profile'), path.join(PYAPP, 'pyproject.toml'),
+      path.join(PYAPP, 'profile.env'), path.join(PYAPP, 'pyproject.toml'),
     ]));
   });
 

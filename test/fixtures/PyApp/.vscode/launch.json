@@ -8,7 +8,7 @@
       "request": "launch",
       "program": "${workspaceFolder}/PyApp/main.py",
       "env": { "APP_ENV": "development", "LOG__LEVEL": "trace" },
-      "envFile": "${workspaceFolder}/PyApp/.env.profile"
+      "envFile": "${workspaceFolder}/PyApp/profile.env"
     },
     {
       "name": "PyApp: prod",

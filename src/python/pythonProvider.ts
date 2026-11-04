@@ -97,6 +97,7 @@ export class PythonProvider implements ConfigProvider {
     const { fs, workspaceRoot } = this.options;
     const root = normPath(workspaceRoot);
     const under = (d: string): boolean => normPath(d) === root || normPath(d).startsWith(root + '/');
+    const projectUnderRoot = under(project.dir);
     let dir = project.dir;
     for (;;) {
       const file = path.join(dir, '.vscode', 'launch.json');
@@ -105,7 +106,7 @@ export class PythonProvider implements ConfigProvider {
         return { ...parsePythonLaunchConfigs(text, file, workspaceRoot), file };
       }
       const parent = path.dirname(dir);
-      if (!under(project.dir) || normPath(dir) === root || parent === dir) {
+      if (!projectUnderRoot || normPath(dir) === root || parent === dir) {
         break;
       }
       dir = parent;
