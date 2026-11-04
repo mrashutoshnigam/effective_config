@@ -23,6 +23,11 @@ describe('toNestedJson', () => {
     expect(JSON.parse(json)).toEqual({ Foo: { Bar: '1' } });
   });
 
+  it('direct value with dense numeric children emits an object — Arr=v, Arr:0=a gives {"Arr":{"0":"a"}}', () => {
+    const json = toNestedJson([E('Arr', 'v'), E('Arr:0', 'a')], val);
+    expect(JSON.parse(json)).toEqual({ Arr: { '0': 'a' } });
+  });
+
   it('numeric children with a gap are emitted as an object — keys 0 and 2 kept', () => {
     const json = toNestedJson([E('A:0', 'x'), E('A:2', 'y')], val);
     expect(JSON.parse(json)).toEqual({ A: { '0': 'x', '2': 'y' } });

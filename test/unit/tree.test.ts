@@ -80,6 +80,11 @@ describe('buildTree', () => {
     expect(t.children[0].flags).toEqual(['mixedArray', 'valueAndChildren']);
   });
 
+  it("array node's own value layer is ignored for mixedArray — Arr=v (base) with items both from dev flags only valueAndChildren", () => {
+    const t = buildTree([E('Arr', 'v', 'base'), E('Arr:0', 'a', 'dev'), E('Arr:1', 'b', 'dev')]);
+    expect(t.children[0].flags).toEqual(['valueAndChildren']);
+  });
+
   it('segments differing only by case share a node — first-seen casing kept', () => {
     const t = buildTree([E('Foo:A', '1'), E('foo:B', '2')]);
     expect(t.children).toHaveLength(1);

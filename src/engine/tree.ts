@@ -33,7 +33,9 @@ function finalize(node: BuildNode): ConfigNode {
   const flags: NodeFlag[] = [];
   if (isArray) {
     const layers = new Set<string>();
-    collectLayerIds(node, layers);
+    for (const child of node.children.values()) {
+      collectLayerIds(child, layers);
+    }
     if (layers.size > 1) {
       flags.push('mixedArray');
     }

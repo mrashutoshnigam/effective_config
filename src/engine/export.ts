@@ -15,7 +15,8 @@ function nodeToJson(node: ConfigNode, valueOf: (e: MergedEntry) => string | null
     }
     return valueOf(node.entry);
   }
-  if (isDenseArray(node)) {
+  const hasDirectValue = node.entry !== undefined && node.entry.value !== null;
+  if (!hasDirectValue && isDenseArray(node)) {
     return node.children.map(c => nodeToJson(c, valueOf));
   }
   const obj: Record<string, unknown> = {};
@@ -36,8 +37,7 @@ function nodeToJson(node: ConfigNode, valueOf: (e: MergedEntry) => string | null
  */
 export function toNestedJson(entries: MergedEntry[], valueOf: (e: MergedEntry) => string | null): string {
   const root = buildTree(entries);
-  const json = root.children.length === 0 ? {} : nodeToJson(root, valueOf);
-  return JSON.stringify(json, null, 2);
+  return JSON.stringify(nodeToJson(root, valueOf), null, 2);
 }
 
 /**
