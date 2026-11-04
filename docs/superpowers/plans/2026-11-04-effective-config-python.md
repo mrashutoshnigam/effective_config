@@ -49,7 +49,7 @@ src/provider.ts            ProjectInfo.kind; ProjectDescription.mergeLabel, envV
 src/dotnet/dotnetProvider.ts  returns mergeLabel / envVarSeparator / watchGlobs
 src/dotnet/projectDiscovery.ts findOwningProject(filePath, projects, preferredKind?)
 src/panel/*, src/extension.ts, src/webview/toolbar.ts, package.json, README.md, CHANGELOG.md
-test/fixtures/PyApp/ (pyproject.toml, .env, .env.development, .env.production, .env.local, .env.example, .env.profile, .vscode/launch.json)
+test/fixtures/PyApp/ (pyproject.toml, .env, .env.development, .env.production, .env.local, .env.example, profile.env, .vscode/launch.json)
 test/fixtures/Mixed/ (Mixed.csproj, appsettings.json, pyproject.toml, .env)
 ```
 

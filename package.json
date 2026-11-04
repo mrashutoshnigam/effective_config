@@ -2,7 +2,7 @@
   "name": "effective-config",
   "displayName": "Effective Config Viewer",
   "description": "Shows the merged .NET appsettings or Python .env configuration for a chosen environment.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "icon": "media/icon.png",
   "engines": {

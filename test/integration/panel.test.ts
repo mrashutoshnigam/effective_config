@@ -18,9 +18,13 @@ const FIXTURES = vscode.workspace.workspaceFolders![0].uri.fsPath;
 /** Temp copy of the WebApp fixture used by the edit test; removed after the test. */
 const TMP_DIR = path.join(FIXTURES, '.tmp-WebApp');
 
+/** Temp copy of the PyApp fixture used by the python edit test; removed after the test. */
+const TMP_PY_DIR = path.join(FIXTURES, '.tmp-PyApp');
+
 /** Removes the temp fixture copy, retrying because Windows file watchers may briefly hold the folder. */
 function removeTmp(): void {
   fs.rmSync(TMP_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  fs.rmSync(TMP_PY_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }
 
 /**
@@ -242,5 +246,56 @@ describe('Effective Config panel (integration)', () => {
     const s = await openAndGetState(api, fixture('Mixed/.env'), (x) => x.projectId === fixture('Mixed/pyproject.toml'));
     const kinds = new Set(s.projects.map((p) => p.kind));
     assert.ok(kinds.has('dotnet') && kinds.has('python'));
+  });
+
+  it('PyApp default launch profile — label says OS variables win and environment is development from APP_ENV', async () => {
+    const s = await openAndGetState(api, fixture('PyApp/.env'), (x) => x.projectId === fixture('PyApp/pyproject.toml'));
+    assert.ok(s.label.includes('OS variables win'), `label was ${s.label}`);
+    assert.strictEqual(s.profile, 'PyApp: dev');
+    assert.strictEqual(s.environment, 'development');
+  });
+
+  it('expanded DATABASE_URL is masked until revealed — value null, then the expanded fixture URL', async () => {
+    const py = (x: ViewState): boolean => x.projectId === fixture('PyApp/pyproject.toml');
+    const s = await openAndGetState(api, fixture('PyApp/.env'), py);
+    const masked = find(s.root, 'DATABASE_URL')!;
+    assert.strictEqual(masked.masked, true);
+    assert.strictEqual(masked.value, null);
+
+    await api.sendMessage({ type: 'reveal', path: 'DATABASE_URL', revealed: true });
+    const revealed = find(api.getPanelState()!.root, 'DATABASE_URL')!;
+    assert.strictEqual(revealed.value, 'postgres://app:dev-password-placeholder@localhost/app');
+
+    await api.sendMessage({ type: 'reveal', path: 'DATABASE_URL', revealed: false });
+  });
+
+  it('selecting the PyApp: prod profile — environment becomes production and DB_HOST is prod-db', async () => {
+    await openAndGetState(api, fixture('PyApp/.env'), (x) => x.projectId === fixture('PyApp/pyproject.toml'));
+    await api.sendMessage({ type: 'select', profile: 'PyApp: prod' });
+    const s = api.getPanelState()!;
+    assert.strictEqual(s.profile, 'PyApp: prod');
+    assert.strictEqual(s.environment, 'production');
+    assert.strictEqual(find(s.root, 'DB_HOST')!.value, 'prod-db');
+  });
+
+  it('editing .env.development refreshes the python panel within 2 s — new DB_HOST appears', async () => {
+    removeTmp();
+    fs.cpSync(fixture('PyApp'), TMP_PY_DIR, { recursive: true });
+    try {
+      const projectId = path.join(TMP_PY_DIR, 'pyproject.toml');
+      const s = await openAndGetState(api, path.join(TMP_PY_DIR, '.env'), (x) => x.projectId === projectId);
+      assert.strictEqual(find(s.root, 'DB_HOST')!.value, 'dev-db');
+
+      fs.writeFileSync(path.join(TMP_PY_DIR, '.env.development'), 'DB_HOST=edited-db\n');
+
+      const refreshed = await waitFor(() => {
+        const cur = api.getPanelState();
+        return cur && find(cur.root, 'DB_HOST')?.value === 'edited-db' ? cur : undefined;
+      }, 2000);
+      assert.strictEqual(find(refreshed.root, 'DB_HOST')!.value, 'edited-db');
+    } finally {
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      removeTmp();
+    }
   });
 });
