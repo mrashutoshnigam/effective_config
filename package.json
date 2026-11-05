@@ -22,13 +22,20 @@
     "Other"
   ],
   "keywords": [
+    "configuration",
     "appsettings",
     "dotenv",
-    ".env",
-    "configuration",
+    "environment variables",
     "dotnet",
     "python",
-    "environment variables"
+    ".env",
+    "config",
+    "env",
+    "user secrets",
+    "launchsettings",
+    "aspnetcore",
+    "config viewer",
+    "merged configuration"
   ],
   "galleryBanner": {
     "color": "#1e1e1e",
