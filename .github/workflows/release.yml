@@ -1,0 +1,48 @@
+name: Release (bump & tag)
+
+# On-demand: bump the version in package.json, commit, and push a v* tag.
+# Pushing the tag triggers publish.yml, which does the actual Marketplace
+# publish and GitHub Release. Run from the Actions tab, or:
+#   gh workflow run release.yml -f bump=patch
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump level"
+        type: choice
+        required: true
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        run: npm version ${{ github.event.inputs.bump }} -m "chore(release): %s"
+
+      - name: Push commit and tag
+        run: git push origin HEAD:main --follow-tags
