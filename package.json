@@ -1,16 +1,39 @@
 {
   "name": "effective-config",
-  "displayName": "Effective Config Viewer",
-  "description": "Shows the merged .NET appsettings or Python .env configuration for a chosen environment.",
+  "displayName": "effective config viewer",
+  "description": "Shows the merged .NET appsettings or Python .env configuration for a chosen environment, with the source of every value.",
   "version": "0.2.0",
-  "private": true,
+  "publisher": "mrashutoshnigam",
   "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mrashutoshnigam/effective-config.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mrashutoshnigam/effective-config/issues"
+  },
+  "homepage": "https://github.com/mrashutoshnigam/effective-config#readme",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
+    "Visualization",
     "Other"
   ],
+  "keywords": [
+    "appsettings",
+    "dotenv",
+    ".env",
+    "configuration",
+    "dotnet",
+    "python",
+    "environment variables"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "main": "./dist/extension.js",
   "activationEvents": [],
   "contributes": {
