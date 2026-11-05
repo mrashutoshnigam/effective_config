@@ -1,39 +1,20 @@
 # Effective Config Viewer
 
-Shows the **final merged configuration** a .NET or Python app would see for a chosen environment, as a hierarchy, with the source of every value.
+Shows the final merged configuration a .NET or Python app would see for a chosen environment, as a hierarchy, with the source of every value.
 
-## Getting started
+Nothing is built or run. The merge is reproduced in TypeScript, so you see the result without starting your app.
 
-Prerequisites: Node.js 20+ and VS Code 1.85+.
+*Tree view — merged configuration with the winning source for every value:*
 
-```bash
-npm install
-npm run build
-```
+![Tree view — merged configuration with per-value source](media/screenshot.png)
 
-### Run from source (F5)
+*Flat view — every key as `Section:Key = value`:*
 
-1. Open this folder in VS Code.
-2. Press **F5** (Run and Debug → **Run Extension (sample projects)**). It builds the extension and opens an Extension Development Host on `test/fixtures`.
-   Use **Run Extension (pick a folder)** to open your own .NET solution or Python project instead.
-3. In the new window, open the panel (see below).
+![Flat view — every key as Section:Key](media/screenshot-flat.png)
 
-Without the debugger:
+## Opening the panel
 
-```bash
-code --extensionDevelopmentPath="<path to this repo>" "<path to your .NET solution or Python project>"
-```
-
-### Install as a normal extension
-
-```bash
-npx vsce package --allow-missing-repository
-code --install-extension effective-config-0.2.0.vsix
-```
-
-Reload VS Code; the extension is then available in every workspace.
-
-### Open the panel
+Install the extension, open a workspace with a .NET or Python project, then open the panel one of these ways:
 
 - Command Palette (`Ctrl+Shift+P`): **Effective Config: Show Merged Configuration**
 - Explorer: right-click an `appsettings*.json`, `.csproj`, `.env` or `.env.*` file
@@ -41,25 +22,14 @@ Reload VS Code; the extension is then available in every workspace.
 
 Pick the project, launch profile and environment at the top of the panel. Click the eye button to reveal a masked value; click a source label to jump to the line that set it.
 
-### Run the tests
-
-```bash
-npm run lint
-npm run test:unit
-npm run test:integration
-```
-
-Integration tests launch the locally installed VS Code (set `VSCODE_EXECUTABLE_PATH` to use a different build).
-
 ## What it does
 
-- Opens a webview panel in an editor tab for one .NET project (a `.csproj` directory containing `appsettings.json`) or Python project (see [Python](#python)), with a project switcher listing both, tagged `[.NET]` / `[Python]`.
-- Pick a launch profile (from `Properties/launchSettings.json`, or `.vscode/launch.json` for Python) and an environment; the profile preselects the environment. .NET: from `ASPNETCORE_ENVIRONMENT` (else `DOTNET_ENVIRONMENT`), defaulting to `Development`. Python: from the profile's environment sources (see Python environment detection), defaulting to `development`. Without launch settings there is no profile and the default environment is used.
-- Tree view by default, a flat `Section:Key = value` toggle, and search by key or value.
-- Every value shows its winning source and the chain of overridden values; click a source to open the file at the line.
-- Open it from the Command Palette (`Effective Config: Show Merged Configuration`), the Explorer context menu on `appsettings*.json` / `*.csproj` / `.env*`, or the editor-title button on `appsettings*.json` / `.env*`.
+- Opens a panel for one .NET project (a `.csproj` directory containing `appsettings.json`) or Python project (see [Python](#python)), with a switcher listing both, tagged `[.NET]` / `[Python]`.
+- Lets you pick a launch profile (from `Properties/launchSettings.json`, or `.vscode/launch.json` for Python) and an environment; the profile preselects the environment. .NET reads `ASPNETCORE_ENVIRONMENT` (else `DOTNET_ENVIRONMENT`), defaulting to `Development`. Python reads the profile's environment sources (see [Profiles and environment detection](#profiles-and-environment-detection)), defaulting to `development`. Without launch settings there is no profile and the default environment is used.
+- Shows a tree view by default, with a flat `Section:Key = value` toggle and search by key or value.
+- Shows each value's winning source and the chain of overridden values; click a source to open the file at the line.
 
-## Merge order
+## .NET merge order
 
 Lowest priority first:
 
@@ -70,7 +40,7 @@ Lowest priority first:
 5. Environment variables — OS variables (filtered), then the selected `launchSettings.json` profile's `environmentVariables`
 6. Command-line args — profile `commandLineArgs`, `--key=value` and `--key value` only
 
-The panel labels the result: **Simulated — default WebApplication.CreateBuilder order**. Nothing is built or run; the merge is reproduced in TypeScript.
+The panel labels the result **Simulated — default WebApplication.CreateBuilder order**.
 
 ## Python
 
@@ -110,7 +80,7 @@ Profiles are the `debugpy` / `python` configurations in the nearest `.vscode/lau
 
 ## Masking and reveal
 
-Values from secret layers, and values whose key matches a mask pattern, are masked by default and are not sent to the webview. Use the per-value reveal control to show one. `*TOKEN*` was added to the default mask patterns, which also applies to .NET projects.
+Values from secret layers, and values whose key matches a mask pattern, are masked by default and are not sent to the webview. Use the per-value reveal control to show one. `*TOKEN*` is included in the default mask patterns, which also apply to .NET projects.
 
 ## Copy and export
 
