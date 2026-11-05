@@ -4,7 +4,7 @@
 
 Config is spread across layers: `appsettings.json`, environment overrides, user secrets, `.env` files, OS variables, launch profiles. Effective Config Viewer merges them the way your framework does and shows you the final result in one panel — with the winning source of every value and the chain of what it overrode.
 
-Nothing is built or run. The merge is reproduced faithfully in the extension.
+Nothing is built or run. The merge is reproduced in the extension, so you see the result without starting your app.
 
 *Tree view — merged configuration with the winning source for every value:*
 
@@ -70,20 +70,6 @@ Set `effectiveConfig.python.fileOverridesOs` to move the files above OS variable
 **.NET:** custom providers, Azure Key Vault / App Configuration, `Program.cs` reordering, `Directory.Build.props` `UserSecretsId`, legacy `SQLCONNSTR_` prefixes and switch mappings are not reflected.
 
 **Python:** `.flaskenv`, Django settings modules, `os.environ` reads in code, conda `environment.yml`, direnv, Poetry/pipenv auto-loading and pydantic `secrets_dir` are not reflected. Some rare quote escapes are not decoded.
-
-## Development
-
-Prerequisites: Node.js 20+, VS Code 1.85+.
-
-```bash
-npm install
-npm run build        # bundle with esbuild
-npm run test:unit    # vitest
-npm run test:integration
-npm run package      # produce the .vsix
-```
-
-Press **F5** to launch an Extension Development Host on the bundled sample projects.
 
 ## License
 
