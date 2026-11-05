@@ -3,6 +3,8 @@
   "displayName": "Effective Config Viewer",
   "description": "Shows the merged .NET appsettings or Python .env configuration for a chosen environment.",
   "version": "0.2.0",
+  "publisher": "mrashutoshnigam",
+  "license": "MIT",
   "private": true,
   "icon": "media/icon.png",
   "repository": {
