@@ -1,110 +1,90 @@
 # Effective Config Viewer
 
-Shows the final merged configuration a .NET or Python app would see for a chosen environment, as a hierarchy, with the source of every value.
+**See the exact configuration your .NET or Python app will load — every value, and where it came from.**
 
-Nothing is built or run. The merge is reproduced in TypeScript, so you see the result without starting your app.
+Config is spread across layers: `appsettings.json`, environment overrides, user secrets, `.env` files, OS variables, launch profiles. Effective Config Viewer merges them the way your framework does and shows you the final result in one panel — with the winning source of every value and the chain of what it overrode.
+
+Nothing is built or run. The merge is reproduced faithfully in the extension.
 
 *Tree view — merged configuration with the winning source for every value:*
 
 ![Tree view — merged configuration with per-value source](media/screenshot.png)
 
-*Flat view — every key as `Section:Key = value`:*
+*Flat view — every key as `Section:Key`, searchable:*
 
 ![Flat view — every key as Section:Key](media/screenshot-flat.png)
 
-## Opening the panel
+## Features
 
-Install the extension, open a workspace with a .NET or Python project, then open the panel one of these ways:
+- **Merged view, one panel.** The final config for a chosen environment, as a tree or a flat `Section:Key = value` list. Search by key or value.
+- **Provenance for every value.** See which layer won and the full override chain. Click a source to jump to the exact line that set it.
+- **.NET and Python, side by side.** .NET projects (`.csproj` + `appsettings.json`) and Python projects (`.env` + a project marker) share one switcher, tagged `[.NET]` / `[Python]`.
+- **Faithful merge order.** .NET: the default `WebApplication.CreateBuilder` order (JSON layers → user secrets → env vars → command-line args). Python: python-dotenv order, OS-wins by default, flip with one setting.
+- **Launch profiles.** Reads `launchSettings.json` (.NET) and `.vscode/launch.json` (Python); the profile preselects the environment.
+- **Secrets stay hidden.** Values from secret layers or matching a mask pattern are masked and never sent to the webview until you reveal them one at a time. Values expanded from a secret stay masked too.
+- **Copy & export.** Copy a value, key path, or env-var name. Export the merged result as nested JSON or flat `KEY=value`.
+- **Auto-refresh.** The panel updates when any source file changes, keeping your expanded and revealed state.
 
-- Command Palette (`Ctrl+Shift+P`): **Effective Config: Show Merged Configuration**
-- Explorer: right-click an `appsettings*.json`, `.csproj`, `.env` or `.env.*` file
-- Editor title button while an `appsettings*.json`, `.env` or `.env.*` file is open
+## Open the panel
 
-Pick the project, launch profile and environment at the top of the panel. Click the eye button to reveal a masked value; click a source label to jump to the line that set it.
+- Command Palette → **Effective Config: Show Merged Configuration**
+- Right-click an `appsettings*.json`, `.csproj`, `.env` or `.env.*` file in the Explorer
+- The editor-title button while an `appsettings*.json` or `.env*` file is open
 
-## What it does
+Pick the project, launch profile and environment at the top of the panel.
 
-- Opens a panel for one .NET project (a `.csproj` directory containing `appsettings.json`) or Python project (see [Python](#python)), with a switcher listing both, tagged `[.NET]` / `[Python]`.
-- Lets you pick a launch profile (from `Properties/launchSettings.json`, or `.vscode/launch.json` for Python) and an environment; the profile preselects the environment. .NET reads `ASPNETCORE_ENVIRONMENT` (else `DOTNET_ENVIRONMENT`), defaulting to `Development`. Python reads the profile's environment sources (see [Profiles and environment detection](#profiles-and-environment-detection)), defaulting to `development`. Without launch settings there is no profile and the default environment is used.
-- Shows a tree view by default, with a flat `Section:Key = value` toggle and search by key or value.
-- Shows each value's winning source and the chain of overridden values; click a source to open the file at the line.
+## How the merge works
 
-## .NET merge order
-
-Lowest priority first:
-
+### .NET (lowest priority first)
 1. `appsettings.json`
 2. `appsettings.{Env}.json`
-3. `appsettings.secrets.json` (only when present)
-4. User Secrets — Development only; `UserSecretsId` from the `.csproj`; `%APPDATA%\Microsoft\UserSecrets\<id>\secrets.json` (Windows) or `~/.microsoft/usersecrets/<id>/secrets.json` (macOS/Linux)
-5. Environment variables — OS variables (filtered), then the selected `launchSettings.json` profile's `environmentVariables`
-6. Command-line args — profile `commandLineArgs`, `--key=value` and `--key value` only
+3. `appsettings.secrets.json` *(when present)*
+4. User Secrets *(Development only, via `UserSecretsId`)*
+5. Environment variables *(OS, filtered, then the launch profile's)*
+6. Command-line args *(profile `commandLineArgs`)*
 
-The panel labels the result **Simulated — default WebApplication.CreateBuilder order**.
-
-## Python
-
-### Projects
-
-A Python project is a folder containing `.env` or any `.env.*` file and one marker: `pyproject.toml`, `requirements.txt`, `setup.py`, `setup.cfg` or `Pipfile`. When a workspace folder has no marker-based project but its root has a `.env`, that root becomes a Python project, unless a .NET project lives at or under it (a .NET repo with a stray `.env` gets no Python project). `node_modules`, `.venv`, `venv`, `env`, `__pycache__`, `site-packages`, `.git`, `bin` and `obj` are ignored. A file owned by both a .NET and a Python project in the same folder opens in the provider matching the file type.
-
-### Layer order
-
-Lowest priority first (OS variables win by default):
-
+### Python (lowest priority first; OS wins by default)
 1. `.env`
 2. `.env.{env}`
 3. `.env.local`
 4. `.env.{env}.local`
-5. Environment (OS) variables, filtered
-6. Profile `envFile` from `.vscode/launch.json`
-7. Profile `env` from `.vscode/launch.json`
+5. OS environment variables *(filtered)*
+6. Launch profile `envFile`, then `env`
 
-The file list is configurable with `effectiveConfig.python.envFiles`; missing files are skipped. With `effectiveConfig.python.fileOverridesOs` set to `true` (python-dotenv `override=True`), layers 1-4 move above layers 5-7. The panel labels the result **Simulated — python-dotenv order (OS variables win)**, or **(files override OS)** when that setting is on.
-
-### OS variable filter
-
-An OS variable is shown only when its key matches (case-insensitively) a key defined in a file or profile layer, or its name starts with a prefix listed in `effectiveConfig.python.envPrefixes` (default none).
-
-### Nested keys
-
-Keys are split on `effectiveConfig.python.nestedDelimiter` (default `__`) into the tree; an empty string keeps keys flat. Matching is case-insensitive. Copy env var name and `KEY=value` export join segments with the same delimiter.
-
-### Parsing and expansion
-
-`.env` files follow python-dotenv rules: `KEY=value`, optional `export ` prefix, comments, ` #` inline comments for unquoted values, single-quoted literals, and double-quoted values with escapes (`\n \r \t \\ \" \'`) that may span lines. `${VAR}` and `${VAR:-default}` are expanded in unquoted and double-quoted values; lookup prefers the process environment (OS plus profile) unless `fileOverridesOs` is on, then keys defined earlier in the same or lower file layers. An unresolved reference becomes the default, or an empty string without one; the default applies only when the variable is undefined (an empty but defined value stays empty). A value expanded from a secret is itself masked (for example a `DATABASE_URL` built from `${DB_PASSWORD}`), and the override chain shows which keys were used. A key without `=` is skipped with an info diagnostic; an unparseable line or an unterminated quote produces a warning, only that line is skipped and the rest of the file still loads.
-
-### Profiles and environment detection
-
-Profiles are the `debugpy` / `python` configurations in the nearest `.vscode/launch.json` (searched from the project folder up to the workspace folder). `${workspaceFolder}` in `envFile` is substituted. The environment name is detected by checking sources in order (profile `env`, profile `envFile`, `.env`, then the OS); within each source the variable names from `effectiveConfig.python.environmentVariables` (default `APP_ENV`, `ENV`, `ENVIRONMENT`, `PYTHON_ENV`) are tried in the configured order, and the first match wins; otherwise `development`. The environment list is `development`, `staging`, `production` plus names from existing `.env.<name>` files (excluding `local`, `example`, `sample`, `template`, `defaults` and `*.local`).
-
-## Masking and reveal
-
-Values from secret layers, and values whose key matches a mask pattern, are masked by default and are not sent to the webview. Use the per-value reveal control to show one. `*TOKEN*` is included in the default mask patterns, which also apply to .NET projects.
-
-## Copy and export
-
-- Copy a value, a key path, or an environment variable name (`A__B__C`; Python uses its configured delimiter).
-- Export the merged result as nested JSON or flat `KEY=value`. Masked values stay masked unless you confirm "reveal all".
-
-## Auto-refresh
-
-The panel refreshes when `appsettings*.json`, `launchSettings.json`, the `.csproj`, the user secrets file, `.env*` files or `.vscode/launch.json` changes, preserving expanded and revealed state. OS environment variables are re-read on manual refresh.
+Set `effectiveConfig.python.fileOverridesOs` to move the files above OS variables (python-dotenv `override=True`). `.env` parsing follows python-dotenv rules, including `${VAR}` / `${VAR:-default}` expansion.
 
 ## Settings
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `effectiveConfig.dotnet.jsonLayers` | `["appsettings.json", "appsettings.{env}.json", "appsettings.secrets.json"]` | JSON configuration layers, lowest priority first. `{env}` is replaced by the selected environment. A layer whose pattern contains `secret` is treated as sensitive. |
-| `effectiveConfig.python.envFiles` | `[".env", ".env.{env}", ".env.local", ".env.{env}.local"]` | Python env files, lowest priority first. `{env}` is replaced by the selected environment. A file whose pattern contains `secret` is treated as sensitive. |
-| `effectiveConfig.python.fileOverridesOs` | `false` | When true, env files override OS variables (python-dotenv `override=True`). |
-| `effectiveConfig.python.envPrefixes` | `[]` | OS variables starting with one of these prefixes (case-insensitive) are shown even when no file defines them. |
-| `effectiveConfig.python.nestedDelimiter` | `"__"` | Delimiter that splits keys into the tree; empty string for flat keys. |
+| `effectiveConfig.dotnet.jsonLayers` | `["appsettings.json", "appsettings.{env}.json", "appsettings.secrets.json"]` | JSON layers, lowest first. `{env}` = selected environment. A pattern containing `secret` is treated as sensitive. |
+| `effectiveConfig.maskPatterns` | `["*Password*", "*Secret*", "*Key*", "*TOKEN*", "ConnectionStrings:*"]` | Case-insensitive globs of keys whose values are masked by default. |
+| `effectiveConfig.python.envFiles` | `[".env", ".env.{env}", ".env.local", ".env.{env}.local"]` | Python env files, lowest first. A pattern containing `secret` is treated as sensitive. |
+| `effectiveConfig.python.fileOverridesOs` | `false` | When true, env files override OS variables. |
+| `effectiveConfig.python.envPrefixes` | `[]` | OS variables with these prefixes are shown even when no file defines them. |
+| `effectiveConfig.python.nestedDelimiter` | `"__"` | Splits keys into the tree; empty string for flat keys. |
 | `effectiveConfig.python.environmentVariables` | `["APP_ENV", "ENV", "ENVIRONMENT", "PYTHON_ENV"]` | Variables, in order, that name the active environment. |
-| `effectiveConfig.maskPatterns` | `["*Password*", "*Secret*", "*Key*", "*TOKEN*", "ConnectionStrings:*"]` | Case-insensitive glob patterns of keys whose values are masked by default (`*` matches any characters, including `:`). |
 
 ## Known limitations
 
-.NET: custom providers, Azure Key Vault / App Configuration, `Program.cs` reordering, `Directory.Build.props` `UserSecretsId`, legacy `SQLCONNSTR_`-style prefixes, command-line switch mappings — not reflected.
+**.NET:** custom providers, Azure Key Vault / App Configuration, `Program.cs` reordering, `Directory.Build.props` `UserSecretsId`, legacy `SQLCONNSTR_` prefixes and switch mappings are not reflected.
 
-Python: `.flaskenv`, Django settings modules, `os.environ` reads in code, conda `environment.yml`, direnv `.envrc`, Poetry/pipenv auto-loading, pydantic `secrets_dir`, and app-specific loaders are not reflected. Single-quoted escapes (`\\`, `\'`) and the double-quote escapes `\a \b \f \v` are not decoded.
+**Python:** `.flaskenv`, Django settings modules, `os.environ` reads in code, conda `environment.yml`, direnv, Poetry/pipenv auto-loading and pydantic `secrets_dir` are not reflected. Some rare quote escapes are not decoded.
+
+## Development
+
+Prerequisites: Node.js 20+, VS Code 1.85+.
+
+```bash
+npm install
+npm run build        # bundle with esbuild
+npm run test:unit    # vitest
+npm run test:integration
+npm run package      # produce the .vsix
+```
+
+Press **F5** to launch an Extension Development Host on the bundled sample projects.
+
+## License
+
+MIT

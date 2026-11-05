@@ -1,0 +1,76 @@
+name: Release (bump, tag & publish)
+
+# On-demand release in a single run: bump the version, commit, tag, publish
+# to the Marketplace and create a GitHub Release. Publishing is done here
+# rather than relying on the tag push to start publish.yml — a tag pushed
+# with the default GITHUB_TOKEN does NOT trigger another workflow
+# (https://docs.github.com/actions/.../trigger-a-workflow), so publish.yml
+# would never fire. publish.yml remains for tags pushed by a human.
+# Run from the Actions tab, or: gh workflow run release.yml -f bump=patch
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump level"
+        type: choice
+        required: true
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test:unit
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        id: bump
+        run: |
+          NEW=$(npm version ${{ github.event.inputs.bump }} -m "chore(release): %s")
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Push commit and tag
+        run: git push origin HEAD:main --follow-tags
+
+      # vsce runs the `vscode:prepublish` script (npm run build) automatically.
+      - name: Package VSIX
+        run: npx --yes @vscode/vsce package --out "effective-config-${{ steps.bump.outputs.version }}.vsix"
+
+      - name: Publish to Marketplace
+        run: npx --yes @vscode/vsce publish --packagePath "effective-config-${{ steps.bump.outputs.version }}.vsix"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.bump.outputs.version }}
+          generate_release_notes: true
+          files: "*.vsix"
