@@ -7,12 +7,12 @@
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mrashutoshnigam/effective-config.git"
+    "url": "https://github.com/mrashutoshnigam/effective_config.git"
   },
   "bugs": {
-    "url": "https://github.com/mrashutoshnigam/effective-config/issues"
+    "url": "https://github.com/mrashutoshnigam/effective_config/issues"
   },
-  "homepage": "https://github.com/mrashutoshnigam/effective-config#readme",
+  "homepage": "https://github.com/mrashutoshnigam/effective_config#readme",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
