@@ -51,6 +51,7 @@ input[type='search'] {
   background: var(--vscode-badge-background);
   color: var(--vscode-badge-foreground);
   border-radius: 8px;
+  font-size: 0.85em;
 }
 
 span.badge {
@@ -58,6 +59,7 @@ span.badge {
   color: var(--vscode-badge-foreground);
   border-radius: 8px;
   padding: 1px 8px;
+  font-size: 0.85em;
 }
 
 .label {
@@ -111,6 +113,15 @@ span.badge {
 
 .key {
   font-weight: 600;
+  color: var(--vscode-debugTokenExpression-name, var(--vscode-symbolIcon-propertyForeground, var(--vscode-foreground)));
+}
+
+.value .text,
+.chain-value {
+  color: var(
+    --vscode-debugTokenExpression-string,
+    var(--vscode-debugTokenExpression-value, var(--vscode-symbolIcon-variableForeground, var(--vscode-foreground)))
+  );
 }
 
 .value .masked {
