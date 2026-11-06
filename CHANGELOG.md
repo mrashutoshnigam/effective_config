@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Internal: shared `DotenvProviderBase` (env file layers, `{env}` patterns, expansion, OS filtering) now backs the Python provider; behaviour is unchanged.
+- Internal: each ecosystem lives in its own folder and is registered with one line in `src/hostEcosystems.ts`.
+- "No project" messages no longer name specific languages.
+
 ## 0.2.0
 
 - Python provider: merges `.env`, `.env.{env}`, `.env.local` and `.env.{env}.local` with OS variables in python-dotenv order (OS wins by default, `fileOverridesOs` to flip).

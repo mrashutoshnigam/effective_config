@@ -71,6 +71,14 @@ Set `effectiveConfig.python.fileOverridesOs` to move the files above OS variable
 
 **Python:** `.flaskenv`, Django settings modules, `os.environ` reads in code, conda `environment.yml`, direnv, Poetry/pipenv auto-loading and pydantic `secrets_dir` are not reflected. Some rare quote escapes are not decoded.
 
+## Adding a language provider
+
+1. Create a folder `src/<language>/` with a `ConfigProvider`. For dotenv-style languages, extend `DotenvProviderBase` (`src/sources/dotenvProviderBase.ts`) and implement `describe`; it provides environment detection, and `src/sources/dotenvEnvironments.ts` lists environments and watch globs. Override `readProcessEnvironment` if something other than the OS sets process variables.
+2. Export an `Ecosystem` from that folder (`src/<language>/ecosystem.ts`): its kind, picker tag, discovery and provider factory.
+3. Add it to `ECOSYSTEMS` in `src/hostEcosystems.ts`, before Python: Python's fallback project gives way to projects the earlier ecosystems found.
+
+Everything else stays in the folder: layers may use their own `kind`, and settings are read with `settingsSource()` from `src/hostServices.ts`. The one exception is the VS Code manifest: new settings and Explorer or editor-title triggers for other file names must be declared in `package.json`.
+
 ## License
 
 MIT

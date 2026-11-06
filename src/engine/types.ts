@@ -1,5 +1,8 @@
-/** The kind of configuration source a {@link Layer} was read from. */
-export type LayerKind = 'json' | 'userSecrets' | 'envOs' | 'envProfile' | 'commandLine' | 'dotenv' | 'envFile';
+/**
+ * The kind of configuration source a {@link Layer} was read from. Open, so a language can add its own
+ * source kinds; the listed ones keep their editor completion.
+ */
+export type LayerKind = 'json' | 'userSecrets' | 'envOs' | 'envProfile' | 'commandLine' | 'dotenv' | 'envFile' | (string & {});
 
 /** A position inside a source file. `line` and `column` are 0-based. */
 export interface SourceLocation {
