@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { readSettings, type Settings } from './settings';
+import { readSettings, type Settings, type SettingsSource } from './settings';
 
 /** Returns a copy of `process.env` without undefined values. */
 export function osEnvironment(): Record<string, string> {
@@ -12,8 +12,17 @@ export function osEnvironment(): Record<string, string> {
   return env;
 }
 
+/**
+ * Gives raw access to the `effectiveConfig` settings section; a language reads its own keys through
+ * it, so its settings need no change to the shared {@link Settings} type.
+ * @returns A source reading the current values.
+ */
+export function settingsSource(): SettingsSource {
+  const section = vscode.workspace.getConfiguration('effectiveConfig');
+  return { get: <T>(key: string) => section.get<T>(key) };
+}
+
 /** Reads the current extension settings with defaults applied. */
 export function currentSettings(): Settings {
-  const section = vscode.workspace.getConfiguration('effectiveConfig');
-  return readSettings({ get: <T>(key: string) => section.get<T>(key) });
+  return readSettings(settingsSource());
 }
