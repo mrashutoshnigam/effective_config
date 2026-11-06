@@ -17,7 +17,7 @@ function norm(p: string): string {
 export function findOwningProject(
   filePath: string,
   projects: ProjectInfo[],
-  preferredKind?: 'dotnet' | 'python',
+  preferredKind?: string,
 ): ProjectInfo | undefined {
   const file = norm(filePath);
   let best: ProjectInfo | undefined;

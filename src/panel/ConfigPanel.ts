@@ -1,13 +1,9 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
-import { DotnetProvider } from '../dotnet/dotnetProvider';
-import { DEFAULT_JSON_LAYERS } from '../dotnet/environments';
-import { nodeFileSystem } from '../sources/fileSystem';
-import { DEFAULT_ENV_FILES, DEFAULT_ENV_NAME_VARIABLES } from '../python/environments';
-import { PythonProvider } from '../python/pythonProvider';
+import { createProvider, projectTag } from '../ecosystem';
+import { ECOSYSTEMS } from '../hostEcosystems';
 import { normalizeKey } from '../engine/keys';
 import { copyText, exportText } from './actions';
 import { mergeLayers } from '../engine/merge';
@@ -43,17 +39,6 @@ function isDirectory(dir: string): boolean {
   } catch {
     return false;
   }
-}
-
-/** Returns a copy of `process.env` without undefined values. */
-function osEnvironment(): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) {
-      env[key] = value;
-    }
-  }
-  return env;
 }
 
 /** Creates a random nonce for the webview content security policy. */
@@ -214,28 +199,9 @@ export class ConfigPanel {
     return `Effective Config: ${project.name}`;
   }
 
-  /** Builds the provider for a project's kind from the current settings. */
+  /** Builds the provider for a project from its registered ecosystem and the current settings. */
   private createProvider(project: ProjectInfo = this.project): ConfigProvider {
-    const config = vscode.workspace.getConfiguration('effectiveConfig');
-    if (project.kind === 'python') {
-      return new PythonProvider({
-        fs: nodeFileSystem,
-        osEnv: osEnvironment(),
-        workspaceRoot: vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project.dir))?.uri.fsPath ?? project.dir,
-        envFiles: config.get<string[]>('python.envFiles') ?? DEFAULT_ENV_FILES,
-        fileOverridesOs: config.get<boolean>('python.fileOverridesOs') ?? false,
-        envPrefixes: config.get<string[]>('python.envPrefixes') ?? [],
-        nestedDelimiter: config.get<string>('python.nestedDelimiter') ?? '__',
-        environmentVariables: config.get<string[]>('python.environmentVariables') ?? DEFAULT_ENV_NAME_VARIABLES,
-      });
-    }
-    return new DotnetProvider({
-      fs: nodeFileSystem,
-      osEnv: osEnvironment(),
-      platform: process.platform,
-      homeDir: os.homedir(),
-      jsonLayers: config.get<string[]>('dotnet.jsonLayers') ?? DEFAULT_JSON_LAYERS,
-    });
+    return createProvider(ECOSYSTEMS, project);
   }
 
   /** Reads the mask patterns setting. */
@@ -461,7 +427,7 @@ export class ConfigPanel {
    */
   async render(): Promise<void> {
     const token = ++this.renderCounter;
-    const projectsInfo = this.projects.map((p) => ({ id: p.id, name: p.name, kind: p.kind }));
+    const projectsInfo = this.projects.map((p) => ({ id: p.id, name: p.name, kind: p.kind, tag: projectTag(ECOSYSTEMS, p) }));
     let state: ViewState;
     let locations = new Map<string, SourceLocation>();
     let entries: MergedEntry[] = [];
