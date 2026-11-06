@@ -2,8 +2,8 @@ import * as path from 'node:path';
 import type { Diagnostic, Layer, LayerEntry } from '../engine/types';
 import { delimitedNameToKey, normalizeKey } from '../engine/keys';
 import type { ConfigProvider, LayerBuild, ProjectDescription, ProjectInfo, Selection } from '../provider';
-import { resolveJsonLayerFiles } from '../dotnet/environments';
 import type { FileSystem } from '../sources/fileSystem';
+import { readFileLayers } from '../sources/fileLayers';
 import { expandDotenvValue, parseDotenv, type DotenvEntry } from '../sources/dotenv';
 import { listPythonEnvironments } from './environments';
 import { parsePythonLaunchConfigs, type PythonLaunchConfig } from './launchJson';
@@ -276,39 +276,25 @@ export class PythonProvider implements ConfigProvider {
     const fileValues = new VarMap();
     const lookup = (name: string): string | undefined =>
       fileOverridesOs ? fileValues.get(name) ?? processEnv.get(name) : processEnv.get(name) ?? fileValues.get(name);
-    const names = await fs.listDir(project.dir);
-    for (const resolved of resolveJsonLayerFiles(names, envFiles, selection.environment)) {
-      const expected = resolved.pattern.split('{env}').join(selection.environment);
-      watchPaths.push(path.join(project.dir, expected));
-      if (resolved.fileName === undefined) {
-        continue;
-      }
-      const filePath = path.join(project.dir, resolved.fileName);
-      if (resolved.caseMismatch) {
-        if (!watchPaths.includes(filePath)) {
-          watchPaths.push(filePath);
-        }
-        diagnostics.push({
-          severity: 'warning',
-          message: `'${resolved.fileName}' matches '${expected}' only ignoring case; it would not load on case-sensitive file systems`,
+    const read = await readFileLayers({
+      fs,
+      dir: project.dir,
+      patterns: envFiles,
+      environment: selection.environment,
+      kind: 'dotenv',
+      parse: (text, filePath) => {
+        const parsed = parseDotenv(text, filePath);
+        const entries = parsed.entries.map((e) => {
+          const entry = this.expandEntry(e, lookup);
+          fileValues.set(e.name, entry.value ?? '');
+          return entry;
         });
-      }
-      const text = await fs.readFile(filePath);
-      if (text === undefined) {
-        continue;
-      }
-      const parsed = parseDotenv(text, filePath);
-      diagnostics.push(...parsed.diagnostics);
-      const entries = parsed.entries.map((e) => {
-        const entry = this.expandEntry(e, lookup);
-        fileValues.set(e.name, entry.value ?? '');
-        return entry;
-      });
-      fileLayers.push({
-        id: resolved.fileName, label: resolved.fileName, kind: 'dotenv',
-        sensitive: resolved.pattern.toLowerCase().includes('secret'), filePath, entries,
-      });
-    }
+        return { entries, diagnostics: parsed.diagnostics };
+      },
+    });
+    diagnostics.push(...read.diagnostics);
+    watchPaths.push(...read.watchPaths);
+    fileLayers.push(...read.layers);
 
     // OS layer, filtered to variables a file/profile layer defines or an allowed prefix selects.
     const knownKeys = new Set<string>();
