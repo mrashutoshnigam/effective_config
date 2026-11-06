@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import { mergeLayers } from '../../src/engine/merge';
+import type { Layer } from '../../src/engine/types';
 import { parseYamlLayer } from '../../src/sources/yamlLayer';
 
-/** Parses `text` and returns its entries as `[key, value]` pairs. */
+/**
+ * Parses YAML and lists its entries.
+ * @param text File contents.
+ * @returns The entries as `[key, value]` pairs.
+ */
 const pairs = (text: string) => parseYamlLayer(text, 'f.yaml').entries.map((e) => [e.key, e.value]);
 
 describe('parseYamlLayer', () => {
@@ -144,14 +150,34 @@ describe('parseYamlLayer', () => {
   });
 
   /**
-   * Validates that parse errors cannot leak values into the banner, which is shown even while values
-   * are masked. Expected: the message has no text from the broken line.
+   * Validates that diagnostics cannot leak values into the banner, which is shown even while values are
+   * masked. An unquoted password can look like YAML syntax, so these are realistic typos. Expected: a
+   * diagnostic is raised, and no message has text from the broken line.
    */
-  it('does not echo source text in a parse error message', () => {
-    const { diagnostics } = parseYamlLayer('password: "hunter2\nnext: 1\n', 'f.yaml');
+  it.each([
+    ['an unterminated quote', 'password: "hunter2\nnext: 1\n'],
+    ['a block scalar header', 'password: |hunter2\n'],
+    ['a bad escape', 'password: "\\uhunter2"\n'],
+    ['an alias', 'password: *hunter2\n'],
+    ['a tag', 'password: !hunter2 x\n'],
+    ['a directive', '%hunter2\n---\na: 1\n'],
+  ])('does not echo source text when a value looks like %s', (_name, text) => {
+    const { diagnostics } = parseYamlLayer(text, 'f.yaml');
     expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0].severity).toBe('error');
     expect(diagnostics[0].message).not.toContain('hunter2');
+  });
+
+  /**
+   * Validates that unknown tags cannot flood the banner, which has one row per diagnostic; a CloudFormation
+   * file can have hundreds. Expected: one warning at the first tag, counting the others.
+   */
+  it('collapses warnings into one diagnostic', () => {
+    const { diagnostics } = parseYamlLayer('A: !x 1\nB: !x 2\nC: !x 3\n', 'f.yaml');
+    expect(diagnostics).toEqual([{
+      severity: 'warning',
+      message: 'YAML warning: TAG_RESOLVE_FAILED (and 2 more)',
+      location: { filePath: 'f.yaml', line: 0, column: 3 },
+    }]);
   });
 
   /**
@@ -197,7 +223,7 @@ describe('parseYamlLayer', () => {
     expect(r.entries.map((e) => [e.key, e.value])).toEqual([['A', '1'], ['B', 'value']]);
     expect(r.diagnostics).toEqual([{
       severity: 'warning',
-      message: 'Unresolved tag: !secret',
+      message: 'YAML warning: TAG_RESOLVE_FAILED',
       location: { filePath: 'f.yaml', line: 1, column: 3 },
     }]);
   });
@@ -218,7 +244,37 @@ describe('parseYamlLayer', () => {
      */
     it('locates an aliased value at the anchored token', () => {
       const { entries } = parseYamlLayer('a: &v 1\nb: *v\n', 'f.yaml');
-      expect(entries[1]).toEqual({ key: 'b', value: '1', location: { filePath: 'f.yaml', line: 0, column: 6 } });
+      expect(entries[1]).toMatchObject({ key: 'b', value: '1', location: { filePath: 'f.yaml', line: 0, column: 6 } });
+    });
+
+    /**
+     * Validates masking through the real merge engine: a value reached through an alias or merge key is
+     * the same secret under a key the mask patterns do not match. Expected: it is sensitive, while a
+     * value that merely shares a document with it is not.
+     */
+    it.each([
+      ['a scalar alias', 'db: {password: &pw hunter2}\nnote: *pw\n', 'note'],
+      ['a collection alias', 'ConnectionStrings: &cs {main: hunter2}\nother: *cs\n', 'other:main'],
+      ['a sequence alias', 'db: {password: &pw [hunter2]}\nother: *pw\n', 'other:0'],
+      ['a merge key', 'ConnectionStrings: &cs {main: hunter2}\nother:\n  <<: *cs\n', 'other:main'],
+      ['a merge list', 'ConnectionStrings: &cs {main: hunter2}\nother:\n  <<: [*cs]\n', 'other:main'],
+      ['a merge chain', 'ConnectionStrings: &cs {main: hunter2}\nmid: &mid\n  <<: *cs\nother:\n  <<: *mid\n', 'other:main'],
+      ['an alias inside a merge', 'db: {password: &pw hunter2}\nbase: &b {v: *pw}\nother:\n  <<: *b\n', 'other:v'],
+    ])('keeps a secret masked through %s', (_name, text, key) => {
+      const entries = parseYamlLayer(`${text}plain: 1\n`, 'f.yaml').entries;
+      const layer: Layer = { id: 'f', label: 'f', kind: 'yaml', sensitive: false, entries };
+      const merged = mergeLayers([layer], ['*Password*', 'ConnectionStrings:*']);
+      expect(merged.find((m) => m.key === key)?.sensitive).toBe(true);
+      expect(merged.find((m) => m.key === 'plain')?.sensitive).toBe(false);
+    });
+
+    /**
+     * Validates that ordinary entries claim no source key, since the panel shows references. Expected:
+     * only the aliased entry has `references`, naming the anchored key.
+     */
+    it('records references only on values reached through an alias', () => {
+      const { entries } = parseYamlLayer('a: &v 1\nb: *v\n', 'f.yaml');
+      expect(entries.map((e) => e.references)).toEqual([undefined, ['a']]);
     });
 
     /**
@@ -246,7 +302,7 @@ describe('parseYamlLayer', () => {
       expect(r.entries).toEqual([]);
       expect(r.diagnostics).toEqual([{
         severity: 'error',
-        message: "Unresolved alias '*nope'",
+        message: 'Unresolved alias',
         location: { filePath: 'f.yaml', line: 1, column: 3 },
       }]);
     });
@@ -257,7 +313,7 @@ describe('parseYamlLayer', () => {
      */
     it('does not resolve an alias to an anchor in an earlier document', () => {
       const r = parseYamlLayer('a: &v 1\n---\nb: *v\n', 'f.yaml');
-      expect(r.diagnostics[0]).toMatchObject({ severity: 'error', message: "Unresolved alias '*v'", location: { line: 2, column: 3 } });
+      expect(r.diagnostics[0]).toMatchObject({ severity: 'error', message: 'Unresolved alias', location: { line: 2, column: 3 } });
     });
 
     /**
@@ -267,7 +323,7 @@ describe('parseYamlLayer', () => {
     it('rejects an alias to a collection containing it', () => {
       const r = parseYamlLayer('a: &a\n  b: *a\n', 'f.yaml');
       expect(r.entries).toEqual([]);
-      expect(r.diagnostics[0]).toMatchObject({ severity: 'error', message: "Alias '*a' refers to a collection containing it", location: { line: 1, column: 5 } });
+      expect(r.diagnostics[0]).toMatchObject({ severity: 'error', message: 'Alias refers to a collection containing it', location: { line: 1, column: 5 } });
     });
 
     /**
@@ -377,12 +433,16 @@ describe('parseYamlLayer', () => {
     it('rejects a mapping merging itself', () => {
       const r = parseYamlLayer('a: &a\n  <<: *a\n', 'f.yaml');
       expect(r.entries).toEqual([]);
-      expect(r.diagnostics[0]).toMatchObject({ severity: 'error', message: "Alias '*a' refers to a collection containing it", location: { line: 1, column: 6 } });
+      expect(r.diagnostics[0]).toMatchObject({ severity: 'error', message: 'Alias refers to a collection containing it', location: { line: 1, column: 6 } });
     });
   });
 
   describe('expansion limits', () => {
-    /** Builds a "billion laughs" file whose expansion doubles `levels` times, tripled per level. */
+    /**
+     * Builds a "billion laughs" file, whose expansion triples per level.
+     * @param levels Number of levels.
+     * @returns The file text.
+     */
     const laughs = (levels: number): string => {
       const lines = ['l0: &l0 x'];
       for (let i = 1; i <= levels; i++) {
@@ -434,6 +494,33 @@ describe('parseYamlLayer', () => {
     });
 
     /**
+     * Validates that a large file with no aliases is not mistaken for an attack: the limits exist for
+     * expansion, not for size. Expected: 60000 flat keys load without diagnostics.
+     */
+    it('loads a large flat file', () => {
+      const lines = Array.from({ length: 60000 }, (_, i) => `k${i}: ${i}`);
+      const r = parseYamlLayer(lines.join('\n'), 'f.yaml');
+      expect(r.diagnostics).toEqual([]);
+      expect(r.entries).toHaveLength(60000);
+    });
+
+    /**
+     * Validates memory amplification by key length, which no node limit catches: every flattened key
+     * repeats its parents, and the merge engine then copies each one when lower-casing it. The explicit
+     * `?` form is what allows a key past YAML's 1024-character limit on implicit keys. Expected: a 1 MB
+     * parent over 1000 children, a 1 GB expansion from a 1 MB file, is one error from the limit, not the
+     * parser.
+     */
+    it('stops a long key repeated across many children with one error', () => {
+      const children = Array.from({ length: 1000 }, (_, i) => `  c${i}: 1`).join('\n');
+      const r = parseYamlLayer(`? ${'k'.repeat(1_000_000)}\n:\n${children}\n`, 'f.yaml');
+      expect(r.entries).toEqual([]);
+      expect(r.diagnostics).toHaveLength(1);
+      expect(r.diagnostics[0].severity).toBe('error');
+      expect(r.diagnostics[0].message).not.toMatch(/^YAML parse error/);
+    });
+
+    /**
      * Validates that the single-pass alias resolution stays linear, since the library's own resolver
      * rescans the document per alias. Expected: 20000 aliases load, each with its value.
      */
@@ -468,6 +555,14 @@ describe('parseYamlLayer', () => {
     it('exposes entries per document, keeping empty documents in place', () => {
       const { documents } = parseYamlLayer('A: 1\n---\n---\nB: 2\n', 'f.yaml');
       expect(documents.map((d) => d.map((e) => e.key))).toEqual([['A'], [], ['B']]);
+    });
+
+    /**
+     * Validates the per-document view when every document is empty, the same contract as above.
+     * Expected: one empty list per document.
+     */
+    it('keeps empty documents in place when all of them are empty', () => {
+      expect(parseYamlLayer('---\n---\n', 'f.yaml').documents).toEqual([[], []]);
     });
 
     /**
