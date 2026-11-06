@@ -23,7 +23,31 @@ export interface DotenvProviderOptions {
 
 /** Case-insensitive variable store (names compared lower-cased). */
 export class VarMap {
+  /** The values, keyed by lower-cased variable name. */
   private readonly map = new Map<string, string>();
+
+  /**
+   * Builds a store from a plain record.
+   * @param values Variable values by name.
+   * @returns A new store holding the values.
+   */
+  static from(values: Record<string, string>): VarMap {
+    const vars = new VarMap();
+    for (const [name, value] of Object.entries(values)) {
+      vars.set(name, value);
+    }
+    return vars;
+  }
+
+  /**
+   * Copies every value of another store into this one, replacing values with the same name.
+   * @param other The store to copy from.
+   */
+  merge(other: VarMap): void {
+    for (const [name, value] of other.map) {
+      this.map.set(name, value);
+    }
+  }
 
   /**
    * Stores a value, replacing any earlier one with the same (case-insensitive) name.
@@ -45,9 +69,11 @@ export class VarMap {
 }
 
 /** An env file read and expanded; `entries` are in source order. */
-export interface ExpandedFile {
-  /** The expanded entries, each with its original variable name. */
-  entries: { name: string; entry: LayerEntry }[];
+interface ExpandedFile {
+  /** The expanded layer entries. */
+  entries: LayerEntry[];
+  /** The expanded values by variable name. */
+  vars: VarMap;
   /** Problems found while parsing. */
   diagnostics: Diagnostic[];
 }
@@ -94,11 +120,7 @@ export abstract class DotenvProviderBase<O extends DotenvProviderOptions = Doten
    * @returns A new store, safe for the caller to modify.
    */
   protected osVars(): VarMap {
-    const vars = new VarMap();
-    for (const [name, value] of Object.entries(this.options.osEnv)) {
-      vars.set(name, value);
-    }
-    return vars;
+    return VarMap.from(this.options.osEnv);
   }
 
   /**
@@ -107,7 +129,7 @@ export abstract class DotenvProviderBase<O extends DotenvProviderOptions = Doten
    * @param lookup Resolves a referenced variable name.
    * @returns The layer entry, carrying its location and any references.
    */
-  protected expandEntry(e: DotenvEntry, lookup: (name: string) => string | undefined): LayerEntry {
+  private expandEntry(e: DotenvEntry, lookup: (name: string) => string | undefined): LayerEntry {
     if (!e.expand) {
       return { key: this.key(e.name), value: e.value, location: e.location };
     }
@@ -117,6 +139,21 @@ export abstract class DotenvProviderBase<O extends DotenvProviderOptions = Doten
       entry.references = references.map((r) => this.key(r));
     }
     return entry;
+  }
+
+  /**
+   * Expands parsed entries in source order, storing each value so later references can resolve it.
+   * @param parsed The parsed entries.
+   * @param lookup Resolves a referenced variable name.
+   * @param store Receives each expanded value by variable name.
+   * @returns The layer entries.
+   */
+  private expandEntries(parsed: DotenvEntry[], lookup: (name: string) => string | undefined, store: VarMap): LayerEntry[] {
+    return parsed.map((e) => {
+      const entry = this.expandEntry(e, lookup);
+      store.set(e.name, entry.value ?? '');
+      return entry;
+    });
   }
 
   /**
@@ -131,13 +168,9 @@ export abstract class DotenvProviderBase<O extends DotenvProviderOptions = Doten
       return undefined;
     }
     const parsed = parseDotenv(text, file);
-    const own = new VarMap();
-    const entries = parsed.entries.map((e) => {
-      const entry = this.expandEntry(e, (n) => base.get(n) ?? own.get(n));
-      own.set(e.name, entry.value ?? '');
-      return { name: e.name, entry };
-    });
-    return { entries, diagnostics: parsed.diagnostics };
+    const vars = new VarMap();
+    const entries = this.expandEntries(parsed.entries, (n) => base.get(n) ?? vars.get(n), vars);
+    return { entries, vars, diagnostics: parsed.diagnostics };
   }
 
   /**
@@ -166,12 +199,7 @@ export abstract class DotenvProviderBase<O extends DotenvProviderOptions = Doten
       kind: 'dotenv',
       parse: (text, filePath) => {
         const parsed = parseDotenv(text, filePath);
-        const entries = parsed.entries.map((e) => {
-          const entry = this.expandEntry(e, lookup);
-          fileValues.set(e.name, entry.value ?? '');
-          return entry;
-        });
-        return { entries, diagnostics: parsed.diagnostics };
+        return { entries: this.expandEntries(parsed.entries, lookup, fileValues), diagnostics: parsed.diagnostics };
       },
     });
 

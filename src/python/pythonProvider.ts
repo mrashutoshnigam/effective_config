@@ -70,11 +70,7 @@ export class PythonProvider extends DotenvProviderBase<PythonProviderOptions> {
     const os = this.osVars();
     const sources: VarMap[] = [];
     if (profile) {
-      const env = new VarMap();
-      for (const [k, v] of Object.entries(profile.env)) {
-        env.set(k, v);
-      }
-      sources.push(env);
+      sources.push(VarMap.from(profile.env));
       if (profile.envFile !== undefined) {
         sources.push(await this.fileVars(profile.envFile, os));
       }
@@ -97,12 +93,7 @@ export class PythonProvider extends DotenvProviderBase<PythonProviderOptions> {
 
   /** Reads an env file into a variable map (empty when missing), values expanded against `os`. */
   private async fileVars(file: string, os: VarMap): Promise<VarMap> {
-    const vars = new VarMap();
-    const read = await this.readExpandedFile(file, os);
-    for (const { name, entry } of read?.entries ?? []) {
-      vars.set(name, entry.value ?? '');
-    }
-    return vars;
+    return (await this.readExpandedFile(file, os))?.vars ?? new VarMap();
   }
 
   /** @inheritdoc */
@@ -154,25 +145,21 @@ export class PythonProvider extends DotenvProviderBase<PythonProviderOptions> {
     const layers: Layer[] = [];
     if (profile?.envFile !== undefined) {
       watchPaths.push(profile.envFile);
-      const read = await this.readExpandedFile(profile.envFile, this.osVars());
+      const read = await this.readExpandedFile(profile.envFile, vars);
       if (read === undefined) {
         diagnostics.push({ severity: 'warning', message: `envFile not found: ${profile.envFile}` });
       } else {
         diagnostics.push(...read.diagnostics);
-        for (const { name, entry } of read.entries) {
-          vars.set(name, entry.value ?? '');
-        }
+        vars.merge(read.vars);
         layers.push({
           id: 'envFile', label: `Env file (launch.json: ${profile.name})`, kind: 'envFile',
           sensitive: path.basename(profile.envFile).toLowerCase().includes('secret'),
-          filePath: profile.envFile, entries: read.entries.map((r) => r.entry),
+          filePath: profile.envFile, entries: read.entries,
         });
       }
     }
     if (profile && Object.keys(profile.env).length > 0) {
-      for (const [name, value] of Object.entries(profile.env)) {
-        vars.set(name, value);
-      }
+      vars.merge(VarMap.from(profile.env));
       layers.push({
         id: 'envProfile', label: `Environment (launch.json: ${profile.name})`, kind: 'envProfile', sensitive: false,
         entries: Object.entries(profile.env).map(([name, value]) => ({ key: this.key(name), value })),
