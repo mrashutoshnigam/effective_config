@@ -2,7 +2,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { Ecosystem } from '../ecosystem';
-import { currentSettings, osEnvironment } from '../hostEnvironment';
+import { currentSettings, osEnvironment } from '../hostServices';
 import type { ProjectInfo } from '../provider';
 import { nodeFileSystem } from '../sources/fileSystem';
 import { DotnetProvider } from './dotnetProvider';

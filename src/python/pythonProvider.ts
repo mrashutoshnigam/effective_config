@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import type { Diagnostic, Layer } from '../engine/types';
 import type { ProjectDescription, ProjectInfo, Selection } from '../provider';
-import { DotenvProviderBase, VarMap, type DotenvProviderOptions, type ProcessEnvironment } from '../sources/dotenvProvider';
+import { DotenvProviderBase, VarMap, type DotenvProviderOptions, type ProcessEnvironment } from '../sources/dotenvProviderBase';
 import { listPythonEnvironments } from './environments';
 import { parsePythonLaunchConfigs, type PythonLaunchConfig } from './launchJson';
 

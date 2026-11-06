@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import { createProvider, projectTag } from '../ecosystem';
 import { ECOSYSTEMS } from '../hostEcosystems';
-import { currentSettings } from '../hostEnvironment';
+import { currentSettings } from '../hostServices';
 import type { ProjectInfo } from '../provider';
 import { isWebviewMessage, type HostMessage, type ViewState, type WebviewMessage } from './messages';
 import { PanelSession } from './session';

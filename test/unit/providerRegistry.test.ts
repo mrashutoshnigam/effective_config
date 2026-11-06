@@ -3,7 +3,7 @@ import { createProvider, discoverProjects, projectTag, type Ecosystem } from '..
 import type { ViewNode } from '../../src/panel/messages';
 import { PanelSession } from '../../src/panel/session';
 import type { ProjectDescription, ProjectInfo } from '../../src/provider';
-import { DotenvProviderBase, type DotenvProviderOptions } from '../../src/sources/dotenvProvider';
+import { DotenvProviderBase, type DotenvProviderOptions } from '../../src/sources/dotenvProviderBase';
 
 /** A language provider nothing in the host knows about: it exists only in this test. */
 class StubLanguageProvider extends DotenvProviderBase {

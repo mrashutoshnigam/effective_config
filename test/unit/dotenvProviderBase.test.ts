@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DotenvProviderBase, type DotenvProviderOptions, type ProcessEnvironment } from '../../src/sources/dotenvProvider';
+import { DotenvProviderBase, type DotenvProviderOptions, type ProcessEnvironment } from '../../src/sources/dotenvProviderBase';
 import type { FileSystem } from '../../src/sources/fileSystem';
 import type { ProjectDescription, ProjectInfo } from '../../src/provider';
 import { mergeLayers } from '../../src/engine/merge';

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { Ecosystem } from '../ecosystem';
-import { currentSettings, osEnvironment } from '../hostEnvironment';
+import { currentSettings, osEnvironment } from '../hostServices';
 import { pythonExcludeGlob, pythonMarkerGlob } from '../settings';
 import { nodeFileSystem } from '../sources/fileSystem';
 import { dropFallbackInDotnetRoots, findPythonProjects } from './projectDiscovery';
