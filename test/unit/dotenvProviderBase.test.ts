@@ -1,42 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { DotenvProviderBase, type DotenvProviderOptions, type ProcessEnvironment } from '../../src/sources/dotenvProviderBase';
-import type { FileSystem } from '../../src/sources/fileSystem';
-import type { ProjectDescription, ProjectInfo } from '../../src/provider';
+import { VarMap, type DotenvProviderOptions, type ProcessEnvironment } from '../../src/sources/dotenvProviderBase';
+import type { Diagnostic } from '../../src/engine/types';
+import type { ProjectInfo } from '../../src/provider';
 import { mergeLayers } from '../../src/engine/merge';
-
-/** Minimal provider built on the base: all that a new dotenv-style ecosystem has to supply. */
-class StubProvider extends DotenvProviderBase {
-  /** @inheritdoc */
-  async describe(): Promise<ProjectDescription> {
-    return {
-      profiles: [],
-      environments: ['dev'],
-      profileEnvironments: {},
-      defaultSelection: { environment: 'dev' },
-      mergeLabel: 'stub',
-      envVarSeparator: '__',
-      watchGlobs: ['.env*'],
-    };
-  }
-}
-
-const DIR = '/stub';
-const PROJECT: ProjectInfo = { id: DIR, name: 'stub', dir: DIR, projectFile: `${DIR}/stub.toml`, kind: 'stub' };
-
-/** In-memory file system keyed by file name inside {@link DIR}. */
-function memFs(files: Record<string, string>): FileSystem {
-  return {
-    readFile: async (p) => files[p.replace(/\\/g, '/').slice(DIR.length + 1)],
-    listDir: async () => Object.keys(files),
-  };
-}
+import { STUB_DIR as DIR, STUB_PROJECT as PROJECT, StubProvider, memFs, stubOptions } from './support/stubProvider';
 
 /** Builds a stub provider over in-memory files; `options` override the defaults. */
 function make(files: Record<string, string>, options: Partial<DotenvProviderOptions> = {}): StubProvider {
-  return new StubProvider({
-    fs: memFs(files), osEnv: {}, envFiles: ['.env', '.env.{env}'], fileOverridesOs: false,
-    envPrefixes: [], nestedDelimiter: '__', ...options,
-  });
+  return new StubProvider(stubOptions(memFs(files), options));
 }
 
 describe('DotenvProviderBase file layers', () => {
@@ -80,12 +51,20 @@ describe('DotenvProviderBase expansion', () => {
   it('prefers OS values by default and file values when fileOverridesOs is set', async () => {
     const files = { '.env': 'HOST=file\nURL=${HOST}\n' };
     const osEnv = { HOST: 'os' };
+    /** Reads the expanded `URL` value with the given precedence setting. */
     const urlOf = async (fileOverridesOs: boolean): Promise<string | null | undefined> => {
       const build = await make(files, { osEnv, fileOverridesOs }).buildLayers(PROJECT, { environment: 'dev' });
       return build.layers.find((l) => l.id === '.env')?.entries.find((e) => e.key === 'URL')?.value;
     };
     expect(await urlOf(false)).toBe('os');
     expect(await urlOf(true)).toBe('file');
+  });
+
+  /** Validates that an empty delimiter keeps keys flat: `DB__HOST` stays one key, and so do its references. */
+  it('keeps keys flat when the delimiter is empty', async () => {
+    const build = await make({ '.env': 'DB__HOST=h\nURL=${DB__HOST}\n' }, { nestedDelimiter: '' }).buildLayers(PROJECT, { environment: 'dev' });
+    expect(build.layers[0].entries.map((e) => e.key)).toEqual(['DB__HOST', 'URL']);
+    expect(build.layers[0].entries[1].references).toEqual(['DB__HOST']);
   });
 
   /** Validates that a single-quoted value stays literal: `${HOST}` is neither expanded nor recorded as a reference. */
@@ -122,6 +101,12 @@ describe('DotenvProviderBase OS layer', () => {
     expect(mergeLayers(build.layers, []).find((m) => m.key === 'A')?.value).toBe('file');
   });
 
+  /** Validates that an empty prefix selects nothing, rather than matching every OS variable. */
+  it('ignores an empty prefix', async () => {
+    const build = await make(files, { osEnv: { UNRELATED: 'z' }, envPrefixes: [''] }).buildLayers(PROJECT, { environment: 'dev' });
+    expect(build.layers.map((l) => l.id)).toEqual(['.env']);
+  });
+
   /** Validates that an empty OS layer is omitted when no OS variable qualifies. */
   it('adds no OS layer when nothing qualifies', async () => {
     const build = await make(files, { osEnv: { UNRELATED: 'z' } }).buildLayers(PROJECT, { environment: 'dev' });
@@ -147,7 +132,7 @@ class ProcessLayerProvider extends StubProvider {
 describe('DotenvProviderBase process environment hook', () => {
   /** Builds the hook provider over the given files and OS variables. */
   const build = (files: Record<string, string>, osEnv: Record<string, string>, fileOverridesOs = false) =>
-    new ProcessLayerProvider({ fs: memFs(files), osEnv, envFiles: ['.env'], fileOverridesOs, envPrefixes: [], nestedDelimiter: '__' })
+    new ProcessLayerProvider(stubOptions(memFs(files), { osEnv, envFiles: ['.env'], fileOverridesOs }))
       .buildLayers(PROJECT, { environment: 'dev' });
 
   /** Validates ordering: files, then OS, then process layers; `fileOverridesOs` moves the files to the top. */
@@ -176,5 +161,102 @@ describe('DotenvProviderBase process environment hook', () => {
     expect(diagnostics.length).toBeGreaterThan(1);
     expect(watchPaths[0]).toBe('/stub/hook.json');
     expect(watchPaths.length).toBeGreaterThan(1);
+  });
+});
+
+/** Provider that reads one extra env file through the base, as a launch configuration's `envFile` would. */
+class ExtraFileProvider extends StubProvider {
+  /** @inheritdoc */
+  protected override async readProcessEnvironment(): Promise<ProcessEnvironment> {
+    const vars = this.osVars();
+    const diagnostics: Diagnostic[] = [];
+    const read = await this.readExpandedFile(`${DIR}/extra.env`, vars);
+    if (read) {
+      vars.merge(read.vars);
+    } else {
+      diagnostics.push({ severity: 'warning', message: 'extra.env missing' });
+    }
+    return { vars, layers: [], diagnostics, watchPaths: [] };
+  }
+}
+
+describe('DotenvProviderBase.readExpandedFile', () => {
+  /** Builds the extra-file provider over the given files and OS variables. */
+  const build = (files: Record<string, string>, osEnv: Record<string, string> = {}) =>
+    new ExtraFileProvider(stubOptions(memFs(files), { osEnv })).buildLayers(PROJECT, { environment: 'dev' });
+
+  /** Validates the error path: a missing file yields undefined, so the caller can report it. */
+  it('returns undefined for a missing file', async () => {
+    const { diagnostics } = await build({});
+    expect(diagnostics.map((d) => d.message)).toEqual(['extra.env missing']);
+  });
+
+  /** Validates expansion order inside one file: the base (`HOST` from the OS) beats the file's own earlier `HOST`. */
+  it('expands against the base first, then the earlier entries of the file', async () => {
+    const files = { 'extra.env': 'HOST=own\nPORT=1\nA=${HOST}:${PORT}\n', '.env': 'OUT=${A}\n' };
+    const { layers } = await build(files, { HOST: 'os' });
+    expect(layers.find((l) => l.id === '.env')?.entries[0].value).toBe('os:1');
+  });
+});
+
+/** Provider with a higher-priority variable source, as a launch profile would supply. */
+class OverrideProvider extends StubProvider {
+  /** Detects the environment with `{ ENV: 'override' }` ranked above the files and the OS. */
+  detect(files: string[]): Promise<string> {
+    return this.detectEnvironment(PROJECT, files, [VarMap.from({ ENV: 'override' })]);
+  }
+}
+
+describe('DotenvProviderBase environment detection', () => {
+  /** Reads the default selection's environment for the given files and OS variables. */
+  const detected = async (files: Record<string, string>, osEnv: Record<string, string> = {}): Promise<string> =>
+    (await make(files, { osEnv }).describe(PROJECT)).defaultSelection.environment;
+
+  /** Validates source priority: `.env` beats the OS even for a lower-priority variable name. */
+  it('prefers .env over the OS', async () => {
+    expect(await detected({ '.env': 'ENV=fromfile\n' }, { APP_ENV: 'fromos' })).toBe('fromfile');
+  });
+
+  /** Validates the fallback to the OS when `.env` names no environment. */
+  it('falls back to the OS', async () => {
+    expect(await detected({ '.env': 'A=1\n' }, { ENV: 'fromos' })).toBe('fromos');
+  });
+
+  /** Validates name priority inside one source, and that a blank value does not count. */
+  it('honours variable order and skips blank values', async () => {
+    expect(await detected({ '.env': 'ENV=second\nAPP_ENV=first\n' })).toBe('first');
+    expect(await detected({ '.env': 'APP_ENV="  "\nENV=second\n' })).toBe('second');
+  });
+
+  /** Validates the default when no source names an environment. */
+  it('defaults to development', async () => {
+    expect(await detected({})).toBe('development');
+  });
+
+  /** Validates that sources a subclass passes in rank above `.env` and the OS. */
+  it('ranks subclass sources above .env and the OS', async () => {
+    const provider = new OverrideProvider(stubOptions(memFs({ '.env': 'APP_ENV=fromfile\n' }), { osEnv: { APP_ENV: 'fromos' } }));
+    expect(await provider.detect(['.env'])).toBe('override');
+  });
+
+  /** Validates the shared helpers a subclass uses to describe a project: environment names from `.env.*` files, and watch globs. */
+  it('lists environments from .env.* files and watches them', async () => {
+    const description = await make({ '.env': '', '.env.qa': '' }).describe(PROJECT);
+    expect(description.environments).toEqual(['development', 'staging', 'production', 'qa']);
+    expect(description.watchGlobs).toEqual(['.env', '.env.*']);
+  });
+});
+
+describe('VarMap', () => {
+  /** Validates case-insensitive reads from a store built with `from`. */
+  it('compares names ignoring case', () => {
+    expect(VarMap.from({ Host: 'h' }).get('HOST')).toBe('h');
+  });
+
+  /** Validates `merge`: the other store's values replace same-named ones, whatever their case, and the rest stay. */
+  it('merges another store over its own values', () => {
+    const vars = VarMap.from({ a: '1', b: '2' });
+    vars.merge(VarMap.from({ B: 'new' }));
+    expect([vars.get('a'), vars.get('b')]).toEqual(['1', 'new']);
   });
 });

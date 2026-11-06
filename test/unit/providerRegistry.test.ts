@@ -2,44 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { createProvider, discoverProjects, projectTag, type Ecosystem } from '../../src/ecosystem';
 import type { ViewNode } from '../../src/panel/messages';
 import { PanelSession } from '../../src/panel/session';
-import type { ProjectDescription, ProjectInfo } from '../../src/provider';
-import { DotenvProviderBase, type DotenvProviderOptions } from '../../src/sources/dotenvProviderBase';
+import { STUB_KIND, STUB_LABEL, STUB_PROJECT, StubProvider, memFs, stubOptions } from './support/stubProvider';
 
-/** A language provider nothing in the host knows about: it exists only in this test. */
-class StubLanguageProvider extends DotenvProviderBase {
-  /** @inheritdoc */
-  async describe(): Promise<ProjectDescription> {
-    return {
-      profiles: [],
-      environments: ['dev'],
-      profileEnvironments: {},
-      defaultSelection: { environment: 'dev' },
-      mergeLabel: 'Simulated — stub language order',
-      envVarSeparator: '__',
-      watchGlobs: ['.env'],
-    };
-  }
-}
-
-/** The stub language project discovered by {@link STUB_ECOSYSTEM}. */
-const STUB_PROJECT: ProjectInfo = { id: '/app/stub.toml', name: 'app', dir: '/app', projectFile: '/app/stub.toml', kind: 'stub-language' };
-
-/** Options reading one in-memory `.env` file. */
-const OPTIONS: DotenvProviderOptions = {
-  fs: { readFile: async () => 'HOST=h\nAPI_PASSWORD=hunter2\n', listDir: async () => ['.env'] },
-  osEnv: {},
-  envFiles: ['.env'],
-  fileOverridesOs: false,
-  envPrefixes: [],
-  nestedDelimiter: '__',
-};
-
-/** The one registry entry a new language needs. */
+/** The one registry entry a new language needs; it reads one in-memory `.env` file. */
 const STUB_ECOSYSTEM: Ecosystem = {
-  kind: 'stub-language',
+  kind: STUB_KIND,
   tag: '[Stub]',
+  /** @inheritdoc */
   discover: async () => [STUB_PROJECT],
-  createProvider: () => new StubLanguageProvider(OPTIONS),
+  /** @inheritdoc */
+  createProvider: () => new StubProvider(stubOptions(memFs({ '.env': 'APP_ENV=dev\nHOST=h\nAPI_PASSWORD=hunter2\n' }))),
 };
 
 /** Finds a direct child of a view node by its key segment. */
@@ -66,8 +38,8 @@ describe('provider registry', () => {
     const { state } = await session.render();
 
     expect(state.diagnostics).toEqual([]);
-    expect(state.projects).toEqual([{ id: '/app/stub.toml', name: 'app', kind: 'stub-language', tag: '[Stub]' }]);
-    expect(state.label).toBe('Simulated — stub language order');
+    expect(state.projects).toEqual([{ id: STUB_PROJECT.id, name: STUB_PROJECT.name, kind: STUB_KIND, tag: '[Stub]' }]);
+    expect(state.label).toBe(STUB_LABEL);
     expect(state.environment).toBe('dev');
     expect(child(state.root, 'HOST')?.value).toBe('h');
     expect(child(state.root, 'API_PASSWORD')?.masked).toBe(true);
