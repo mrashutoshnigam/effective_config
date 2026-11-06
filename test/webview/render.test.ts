@@ -41,7 +41,7 @@ function section(path: string, children: ViewNode[], extra: Partial<ViewNode> = 
 /** Builds a complete view state around the given top-level nodes. */
 function makeState(children: ViewNode[], extra: Partial<ViewState> = {}): ViewState {
   return {
-    projects: [{ id: 'p1', name: 'Api', kind: 'dotnet' }],
+    projects: [{ id: 'p1', name: 'Api', kind: 'dotnet', tag: '[.NET]' }],
     projectId: 'p1',
     profiles: ['https', 'iis'],
     profile: 'https',
@@ -275,8 +275,8 @@ describe('render', () => {
     expect(setup(makeState([])).el.querySelector('select[data-role=project]')).toBeNull();
     const state = makeState([], {
       projects: [
-        { id: 'p1', name: 'Api', kind: 'dotnet' },
-        { id: 'p2', name: 'Web', kind: 'python' },
+        { id: 'p1', name: 'Api', kind: 'dotnet', tag: '[.NET]' },
+        { id: 'p2', name: 'Web', kind: 'python', tag: '[Python]' },
       ],
     });
     const { el, post } = setup(state);
@@ -288,8 +288,8 @@ describe('render', () => {
     const { el } = setup(
       makeState([], {
         projects: [
-          { id: 'p1', name: 'Api', kind: 'dotnet' },
-          { id: 'p2', name: 'PyApp', kind: 'python' },
+          { id: 'p1', name: 'Api', kind: 'dotnet', tag: '[.NET]' },
+          { id: 'p2', name: 'PyApp', kind: 'python', tag: '[Python]' },
         ],
       }),
     );

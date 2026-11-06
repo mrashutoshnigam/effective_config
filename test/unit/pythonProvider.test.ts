@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
 import { PythonProvider, type PythonProviderOptions } from '../../src/python/pythonProvider';
 import { DEFAULT_ENV_FILES, DEFAULT_ENV_NAME_VARIABLES } from '../../src/python/environments';
-import { nodeFileSystem, type FileSystem } from '../../src/dotnet/fileSystem';
+import { nodeFileSystem, type FileSystem } from '../../src/sources/fileSystem';
 import { mergeLayers } from '../../src/engine/merge';
 import type { ProjectInfo } from '../../src/provider';
 

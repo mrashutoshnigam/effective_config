@@ -47,24 +47,3 @@ export function listEnvironments(fileNames: string[], jsonLayers: string[]): str
     });
   return [...result, ...rest];
 }
-
-/**
- * Matches JSON layer patterns to files in a directory listing, ignoring case.
- * @param fileNames File names in the project directory.
- * @param jsonLayers JSON layer patterns, lowest priority first.
- * @param env Environment name substituted for `{env}`.
- * @returns One entry per pattern, in order: the found file name (undefined when missing) and
- * whether its casing differs from the expected name (it would not load on case-sensitive file systems).
- */
-export function resolveJsonLayerFiles(
-  fileNames: string[],
-  jsonLayers: string[],
-  env: string,
-): { pattern: string; fileName?: string; caseMismatch: boolean }[] {
-  return jsonLayers.map((pattern) => {
-    const expected = pattern.split('{env}').join(env);
-    const lower = expected.toLowerCase();
-    const fileName = fileNames.includes(expected) ? expected : fileNames.find((f) => f.toLowerCase() === lower);
-    return { pattern, fileName, caseMismatch: fileName !== undefined && fileName !== expected };
-  });
-}

@@ -6,8 +6,9 @@ import { parseJsonLayer } from '../sources/jsonLayer';
 import { envVarEntries, filterOsEnv } from '../sources/envVars';
 import { parseCommandLineArgs } from '../sources/commandLine';
 import { parseLaunchSettings, type LaunchProfile } from './launchSettings';
-import { listEnvironments, resolveJsonLayerFiles } from './environments';
-import type { FileSystem } from './fileSystem';
+import { listEnvironments } from './environments';
+import type { FileSystem } from '../sources/fileSystem';
+import { readFileLayers } from '../sources/fileLayers';
 import { readUserSecretsId, userSecretsPath } from './userSecrets';
 
 /** Construction options of {@link DotnetProvider}. */
@@ -82,38 +83,19 @@ export class DotnetProvider implements ConfigProvider {
       }
     };
 
-    const files = await fs.listDir(project.dir);
-    for (const resolved of resolveJsonLayerFiles(files, jsonLayers, selection.environment)) {
-      const expected = resolved.pattern.split('{env}').join(selection.environment);
-      watchPaths.push(path.join(project.dir, expected));
-      if (resolved.fileName === undefined) {
-        continue;
-      }
-      const filePath = path.join(project.dir, resolved.fileName);
-      if (resolved.caseMismatch) {
-        if (!watchPaths.includes(filePath)) {
-          watchPaths.push(filePath);
-        }
-        diagnostics.push({
-          severity: 'warning',
-          message: `'${resolved.fileName}' matches '${expected}' only ignoring case; it would not load on case-sensitive file systems`,
-        });
-      }
-      const text = await fs.readFile(filePath);
-      if (text === undefined) {
-        continue;
-      }
-      const parsed = parseJsonLayer(text, filePath);
-      diagnostics.push(...parsed.diagnostics);
-      addTopLevel(parsed.entries);
-      layers.push({
-        id: resolved.fileName,
-        label: resolved.fileName,
-        kind: 'json',
-        sensitive: resolved.pattern.toLowerCase().includes('secret'),
-        filePath,
-        entries: parsed.entries,
-      });
+    const fileLayers = await readFileLayers({
+      fs,
+      dir: project.dir,
+      patterns: jsonLayers,
+      environment: selection.environment,
+      kind: 'json',
+      parse: parseJsonLayer,
+    });
+    diagnostics.push(...fileLayers.diagnostics);
+    watchPaths.push(...fileLayers.watchPaths);
+    for (const layer of fileLayers.layers) {
+      addTopLevel(layer.entries);
+      layers.push(layer);
     }
 
     const launch = await this.readLaunchSettings(project);

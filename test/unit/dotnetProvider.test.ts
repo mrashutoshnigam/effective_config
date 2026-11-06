@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
 import { DotnetProvider } from '../../src/dotnet/dotnetProvider';
 import { DEFAULT_JSON_LAYERS } from '../../src/dotnet/environments';
-import { nodeFileSystem, type FileSystem } from '../../src/dotnet/fileSystem';
+import { nodeFileSystem, type FileSystem } from '../../src/sources/fileSystem';
 import type { ProjectInfo } from '../../src/provider';
 
 const FIXTURES = path.resolve(__dirname, '../fixtures');

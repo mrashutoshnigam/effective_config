@@ -1,26 +1,13 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
-import { DotnetProvider } from '../dotnet/dotnetProvider';
-import { DEFAULT_JSON_LAYERS } from '../dotnet/environments';
-import { nodeFileSystem } from '../dotnet/fileSystem';
-import { DEFAULT_ENV_FILES, DEFAULT_ENV_NAME_VARIABLES } from '../python/environments';
-import { PythonProvider } from '../python/pythonProvider';
-import { normalizeKey } from '../engine/keys';
-import { copyText, exportText } from './actions';
-import { mergeLayers } from '../engine/merge';
-import { buildTree } from '../engine/tree';
-import type { Diagnostic, MergedEntry, SourceLocation } from '../engine/types';
-import type { ConfigProvider, ProjectDescription, ProjectInfo, Selection } from '../provider';
-import type { HostMessage, ViewNode, ViewState, WebviewMessage } from './messages';
-import { nextSelection } from './selection';
-import { RevealState, toViewModel } from './viewModel';
+import { createProvider, projectTag } from '../ecosystem';
+import { ECOSYSTEMS, currentSettings } from '../hostEcosystems';
+import type { ProjectInfo } from '../provider';
+import { isWebviewMessage, type HostMessage, type ViewState, type WebviewMessage } from './messages';
+import { PanelSession } from './session';
 import { watchTargetKey, watchTargetsFor, type WatchTarget } from './watchTargets';
-
-/** Default mask patterns (glob, case-insensitive). */
-const DEFAULT_MASK_PATTERNS = ['*Password*', '*Secret*', '*Key*', '*TOKEN*', 'ConnectionStrings:*'];
 
 /** Delay in milliseconds before a file change triggers a re-render. */
 const REFRESH_DEBOUNCE_MS = 200;
@@ -45,47 +32,9 @@ function isDirectory(dir: string): boolean {
   }
 }
 
-/** Returns a copy of `process.env` without undefined values. */
-function osEnvironment(): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) {
-      env[key] = value;
-    }
-  }
-  return env;
-}
-
 /** Creates a random nonce for the webview content security policy. */
 function createNonce(): string {
   return randomBytes(16).toString('hex');
-}
-
-/** Type guard validating the shape of a message received from the webview. */
-function isWebviewMessage(value: unknown): value is WebviewMessage {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const m = value as Record<string, unknown>;
-  const optString = (v: unknown): boolean => v === undefined || typeof v === 'string';
-  switch (m.type) {
-    case 'ready':
-    case 'refresh':
-    case 'exportMenu':
-      return true;
-    case 'select':
-      return optString(m.projectId) && (m.profile === null || optString(m.profile)) && optString(m.environment);
-    case 'reveal':
-      return typeof m.path === 'string' && typeof m.revealed === 'boolean';
-    case 'openSource':
-      return typeof m.locationId === 'string';
-    case 'copy':
-      return typeof m.path === 'string' && (m.what === 'value' || m.what === 'keyPath' || m.what === 'envVarName');
-    case 'export':
-      return (m.format === 'json' || m.format === 'env') && typeof m.revealAll === 'boolean';
-    default:
-      return false;
-  }
 }
 
 /** An editor-tab webview showing the merged configuration of one project. */
@@ -98,14 +47,7 @@ export class ConfigPanel {
 
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
-  private reveals = new RevealState();
-  private selectionReady = false;
-  private locations = new Map<string, SourceLocation>();
-  private entries: MergedEntry[] = [];
-  private selection: Selection = { environment: 'Development' };
-  /** Description of the shown project from the latest render; supplies label, separator and watch globs. */
-  private description?: ProjectDescription;
-  private renderCounter = 0;
+  private readonly session: PanelSession;
   private disposed = false;
   private watchers: vscode.Disposable[] = [];
   private watchedKeys = new Set<string>();
@@ -113,9 +55,14 @@ export class ConfigPanel {
 
   private constructor(
     private readonly context: vscode.ExtensionContext,
-    private project: ProjectInfo,
-    private projects: ProjectInfo[],
+    project: ProjectInfo,
+    projects: ProjectInfo[],
   ) {
+    this.session = new PanelSession(project, projects, {
+      createProvider: (p) => createProvider(ECOSYSTEMS, p),
+      maskPatterns: () => currentSettings().maskPatterns,
+      tag: (p) => projectTag(ECOSYSTEMS, p),
+    });
     const distUri = vscode.Uri.joinPath(context.extensionUri, 'dist');
     this.panel = vscode.window.createWebviewPanel(
       VIEW_TYPE,
@@ -151,8 +98,8 @@ export class ConfigPanel {
       this.disposables.forEach((d) => d.dispose());
       this.disposables.length = 0;
       this.disposed = true;
-      if (ConfigPanel.panels.get(this.project.id) === this) {
-        ConfigPanel.panels.delete(this.project.id);
+      if (ConfigPanel.panels.get(this.session.project.id) === this) {
+        ConfigPanel.panels.delete(this.session.project.id);
       }
       if (ConfigPanel.mostRecent === this) {
         ConfigPanel.mostRecent = undefined;
@@ -192,7 +139,7 @@ export class ConfigPanel {
   static show(context: vscode.ExtensionContext, project: ProjectInfo, projects: ProjectInfo[]): ConfigPanel {
     const existing = ConfigPanel.panels.get(project.id);
     if (existing) {
-      existing.projects = projects;
+      existing.session.setProjects(projects);
       existing.panel.reveal(undefined, false);
       ConfigPanel.mostRecent = existing;
       void existing.render();
@@ -212,35 +159,6 @@ export class ConfigPanel {
   /** Builds the panel title for a project. */
   private static titleFor(project: ProjectInfo): string {
     return `Effective Config: ${project.name}`;
-  }
-
-  /** Builds the provider for a project's kind from the current settings. */
-  private createProvider(project: ProjectInfo = this.project): ConfigProvider {
-    const config = vscode.workspace.getConfiguration('effectiveConfig');
-    if (project.kind === 'python') {
-      return new PythonProvider({
-        fs: nodeFileSystem,
-        osEnv: osEnvironment(),
-        workspaceRoot: vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project.dir))?.uri.fsPath ?? project.dir,
-        envFiles: config.get<string[]>('python.envFiles') ?? DEFAULT_ENV_FILES,
-        fileOverridesOs: config.get<boolean>('python.fileOverridesOs') ?? false,
-        envPrefixes: config.get<string[]>('python.envPrefixes') ?? [],
-        nestedDelimiter: config.get<string>('python.nestedDelimiter') ?? '__',
-        environmentVariables: config.get<string[]>('python.environmentVariables') ?? DEFAULT_ENV_NAME_VARIABLES,
-      });
-    }
-    return new DotnetProvider({
-      fs: nodeFileSystem,
-      osEnv: osEnvironment(),
-      platform: process.platform,
-      homeDir: os.homedir(),
-      jsonLayers: config.get<string[]>('dotnet.jsonLayers') ?? DEFAULT_JSON_LAYERS,
-    });
-  }
-
-  /** Reads the mask patterns setting. */
-  private maskPatterns(): string[] {
-    return vscode.workspace.getConfiguration('effectiveConfig').get<string[]>('maskPatterns') ?? DEFAULT_MASK_PATTERNS;
   }
 
   /** Builds the full HTML document of the webview. */
@@ -275,19 +193,10 @@ export class ConfigPanel {
       case 'select':
         await this.handleSelect(message);
         break;
-      case 'reveal': {
-        if (message.revealed) {
-          const norm = normalizeKey(message.path);
-          const entry = this.entries.find((e) => normalizeKey(e.key) === norm);
-          if (entry) {
-            this.reveals.reveal(message.path, entry.winner.layerId);
-          }
-        } else {
-          this.reveals.hide(message.path);
-        }
+      case 'reveal':
+        this.session.setReveal(message.path, message.revealed);
         await this.render();
         break;
-      }
       case 'openSource':
         await this.openSource(message.locationId);
         break;
@@ -310,20 +219,12 @@ export class ConfigPanel {
 
   /** Copies a value, key path or env var name to the clipboard; masked values are not copied. */
   private async copy(keyPath: string, what: 'value' | 'keyPath' | 'envVarName'): Promise<void> {
-    const norm = normalizeKey(keyPath);
-    const known = this.entries.some((e) => {
-      const key = normalizeKey(e.key);
-      return key === norm || key.startsWith(`${norm}:`);
-    });
-    if (!known) {
-      return;
-    }
-    const text = copyText(this.entries, keyPath, what, this.reveals.current(this.entries), this.description?.envVarSeparator);
-    if (text === undefined) {
+    const outcome = this.session.copy(keyPath, what);
+    if (outcome.kind === 'masked') {
       void vscode.window.showInformationMessage('Reveal the value before copying');
-      return;
+    } else if (outcome.kind === 'text') {
+      await vscode.env.clipboard.writeText(outcome.text);
     }
-    await vscode.env.clipboard.writeText(text);
   }
 
   /** Lets the user pick an export format via a quick pick, then runs the export. */
@@ -342,7 +243,7 @@ export class ConfigPanel {
         return;
       }
     }
-    const content = exportText(this.entries, format, revealAll, this.description?.envVarSeparator);
+    const content = this.session.exportContent(format, revealAll);
     const doc = await vscode.workspace.openTextDocument({ content, language: format === 'json' ? 'json' : 'properties' });
     await vscode.window.showTextDocument(doc, { preview: false });
   }
@@ -377,8 +278,8 @@ export class ConfigPanel {
    */
   private syncWatchers(paths: string[]): void {
     const targets: WatchTarget[] = watchTargetsFor(paths, isDirectory);
-    for (const pattern of this.description?.watchGlobs ?? []) {
-      targets.push({ base: this.project.dir, pattern });
+    for (const pattern of this.session.watchGlobs) {
+      targets.push({ base: this.session.project.dir, pattern });
     }
     const next = new Set(targets.map(watchTargetKey));
     if (next.size === this.watchedKeys.size && [...next].every((k) => this.watchedKeys.has(k))) {
@@ -396,50 +297,28 @@ export class ConfigPanel {
     this.watchedKeys = next;
   }
 
-  /** Applies a selection change (project, profile, environment) and re-renders; state is committed only on success. */
+  /** Applies a selection change (project, profile, environment) and re-renders. */
   private async handleSelect(message: Extract<WebviewMessage, { type: 'select' }>): Promise<void> {
-    try {
-      let target = this.project;
-      if (message.projectId !== undefined && message.projectId !== this.project.id) {
-        const requested = this.projects.find((p) => p.id === message.projectId);
-        if (requested) {
-          const other = ConfigPanel.panels.get(requested.id);
-          if (other && other !== this) {
-            other.panel.reveal(undefined, false);
-            await this.render();
-            return;
-          }
-          target = requested;
-        }
+    const outcome = await this.session.select(message, (p) => {
+      const other = ConfigPanel.panels.get(p.id);
+      return other !== undefined && other !== this;
+    });
+    if (outcome.kind === 'redirect') {
+      ConfigPanel.panels.get(outcome.project.id)?.panel.reveal(undefined, false);
+    } else if (outcome.kind === 'applied' && outcome.projectChanged) {
+      const target = this.session.project;
+      if (ConfigPanel.panels.get(outcome.previous.id) === this) {
+        ConfigPanel.panels.delete(outcome.previous.id);
       }
-      const provider = this.createProvider(target);
-      const projectChanged = target !== this.project;
-      const needsDescription = projectChanged || (message.profile !== undefined && message.profile !== null);
-      const description = needsDescription ? await provider.describe(target) : undefined;
-      const selection = nextSelection(this.selection, message, description, projectChanged);
-      if (target !== this.project) {
-        if (ConfigPanel.panels.get(this.project.id) === this) {
-          ConfigPanel.panels.delete(this.project.id);
-        }
-        this.project = target;
-        ConfigPanel.panels.set(target.id, this);
-        this.panel.title = ConfigPanel.titleFor(target);
-        this.reveals = new RevealState();
-      }
-      if (description) {
-        this.description = description;
-      }
-      this.selection = selection;
-      this.selectionReady = true;
-    } catch {
-      // Nothing committed; render reports the failure as an error diagnostic.
+      ConfigPanel.panels.set(target.id, this);
+      this.panel.title = ConfigPanel.titleFor(target);
     }
     await this.render();
   }
 
   /** Opens the source file of a location id at its line and column. */
   private async openSource(locationId: string): Promise<void> {
-    const location = this.locations.get(locationId);
+    const location = this.session.location(locationId);
     if (!location) {
       return;
     }
@@ -450,69 +329,15 @@ export class ConfigPanel {
     });
   }
 
-  /** Builds an empty root node used when configuration could not be read. */
-  private static emptyRoot(): ViewNode {
-    return { segment: '', path: '', masked: false, revealed: false, sensitive: false, overridden: [], isArray: false, flags: [], children: [] };
-  }
-
   /**
    * Computes the view state for the current selection and posts it to the webview.
    * Never throws: failures are reported as an error diagnostic with an empty tree.
    */
   async render(): Promise<void> {
-    const token = ++this.renderCounter;
-    const projectsInfo = this.projects.map((p) => ({ id: p.id, name: p.name, kind: p.kind }));
-    let state: ViewState;
-    let locations = new Map<string, SourceLocation>();
-    let entries: MergedEntry[] = [];
-    let watchPaths: string[] | undefined;
-    try {
-      const provider = this.createProvider();
-      const description = await provider.describe(this.project);
-      this.description = description;
-      if (!this.selectionReady) {
-        this.selection = { ...description.defaultSelection };
-        this.selectionReady = true;
-      }
-      const build = await provider.buildLayers(this.project, this.selection);
-      watchPaths = build.watchPaths;
-      entries = mergeLayers(build.layers, this.maskPatterns());
-      const root = toViewModel(buildTree(entries), this.reveals.current(entries), locations, `r${token}`);
-      state = {
-        projects: projectsInfo,
-        projectId: this.project.id,
-        profiles: description.profiles,
-        profile: this.selection.profile,
-        environments: description.environments,
-        environment: this.selection.environment,
-        root,
-        diagnostics: build.diagnostics,
-        label: description.mergeLabel,
-      };
-    } catch (err) {
-      locations = new Map();
-      entries = [];
-      const diagnostic: Diagnostic = {
-        severity: 'error',
-        message: `Failed to read configuration: ${err instanceof Error ? err.message : String(err)}`,
-      };
-      state = {
-        projects: projectsInfo,
-        projectId: this.project.id,
-        profiles: [],
-        profile: this.selection.profile,
-        environments: [this.selection.environment],
-        environment: this.selection.environment,
-        root: ConfigPanel.emptyRoot(),
-        diagnostics: [diagnostic],
-        label: this.description?.mergeLabel ?? '',
-      };
-    }
-    if (this.disposed || token !== this.renderCounter) {
+    const { state, watchPaths, stale } = await this.session.render();
+    if (this.disposed || stale) {
       return;
     }
-    this.locations = locations;
-    this.entries = entries;
     if (watchPaths) {
       this.syncWatchers(watchPaths);
     }

@@ -49,7 +49,7 @@ export function renderToolbar(state: ViewState, ui: UiState, hooks: ToolbarHooks
   const { post } = hooks;
 
   if (state.projects.length > 1) {
-    const p = makeSelect('project', 'Project', state.projects.map((x): [string, string] => [x.id, `${x.kind === 'python' ? '[Python]' : '[.NET]'} ${x.name}`]), state.projectId);
+    const p = makeSelect('project', 'Project', state.projects.map((x): [string, string] => [x.id, `${x.tag} ${x.name}`]), state.projectId);
     p.addEventListener('change', () => post({ type: 'select', projectId: p.value }));
     bar.append(p);
   }

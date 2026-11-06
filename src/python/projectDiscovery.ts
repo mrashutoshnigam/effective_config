@@ -1,4 +1,4 @@
-import type { FileSystem } from '../dotnet/fileSystem';
+import type { FileSystem } from '../sources/fileSystem';
 import type { ProjectInfo } from '../provider';
 
 /** Files whose presence marks a directory as a Python project, in id-preference order. */

@@ -29,7 +29,7 @@ export interface ViewNode {
 /** The complete view state the host posts to the webview. */
 export interface ViewState {
   /** Projects that can be switched to. */
-  projects: { id: string; name: string; kind: 'dotnet' | 'python' }[];
+  projects: { id: string; name: string; kind: string; tag: string }[];
   /** The shown project's id. */
   projectId: string;
   /** Available launch profile names. */
@@ -61,3 +61,40 @@ export type WebviewMessage =
   | { type: 'exportMenu' }
   | { type: 'export'; format: 'json' | 'env'; revealAll: boolean }
   | { type: 'refresh' };
+
+/** Checks one message body (already known to be an object) for its type. */
+type Validator = (m: Record<string, unknown>) => boolean;
+
+/** True when the value is undefined or a string. */
+const optString = (v: unknown): boolean => v === undefined || typeof v === 'string';
+
+/**
+ * One validator per {@link WebviewMessage} type. The mapped type makes the table exhaustive: adding a
+ * message type without a validator fails type-checking, so the protocol and its guard cannot drift.
+ */
+const VALIDATORS: { [K in WebviewMessage['type']]: Validator } = {
+  ready: () => true,
+  refresh: () => true,
+  exportMenu: () => true,
+  select: (m) => optString(m.projectId) && (m.profile === null || optString(m.profile)) && optString(m.environment),
+  reveal: (m) => typeof m.path === 'string' && typeof m.revealed === 'boolean',
+  openSource: (m) => typeof m.locationId === 'string',
+  copy: (m) => typeof m.path === 'string' && (m.what === 'value' || m.what === 'keyPath' || m.what === 'envVarName'),
+  export: (m) => (m.format === 'json' || m.format === 'env') && typeof m.revealAll === 'boolean',
+};
+
+/** The message types of the webview-to-host protocol. */
+export const WEBVIEW_MESSAGE_TYPES = Object.keys(VALIDATORS) as WebviewMessage['type'][];
+
+/**
+ * Type guard validating the shape of a message received from the webview.
+ * @param value Anything received over the webview channel.
+ * @returns True when `value` is a well-formed {@link WebviewMessage}.
+ */
+export function isWebviewMessage(value: unknown): value is WebviewMessage {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const m = value as Record<string, unknown>;
+  return typeof m.type === 'string' && Object.hasOwn(VALIDATORS, m.type) && VALIDATORS[m.type as WebviewMessage['type']](m);
+}
