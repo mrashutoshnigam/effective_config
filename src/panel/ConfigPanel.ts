@@ -299,7 +299,6 @@ export class ConfigPanel {
 
   /** Applies a selection change (project, profile, environment) and re-renders. */
   private async handleSelect(message: Extract<WebviewMessage, { type: 'select' }>): Promise<void> {
-    const previous = this.session.project;
     const outcome = await this.session.select(message, (p) => {
       const other = ConfigPanel.panels.get(p.id);
       return other !== undefined && other !== this;
@@ -308,8 +307,8 @@ export class ConfigPanel {
       ConfigPanel.panels.get(outcome.project.id)?.panel.reveal(undefined, false);
     } else if (outcome.kind === 'applied' && outcome.projectChanged) {
       const target = this.session.project;
-      if (ConfigPanel.panels.get(previous.id) === this) {
-        ConfigPanel.panels.delete(previous.id);
+      if (ConfigPanel.panels.get(outcome.previous.id) === this) {
+        ConfigPanel.panels.delete(outcome.previous.id);
       }
       ConfigPanel.panels.set(target.id, this);
       this.panel.title = ConfigPanel.titleFor(target);

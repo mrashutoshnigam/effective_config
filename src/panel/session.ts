@@ -33,7 +33,7 @@ export type CopyOutcome = { kind: 'unknown' } | { kind: 'masked' } | { kind: 'te
 
 /** Result of {@link PanelSession.select}. */
 export type SelectOutcome =
-  | { kind: 'applied'; projectChanged: boolean }
+  | { kind: 'applied'; projectChanged: boolean; previous: ProjectInfo }
   | { kind: 'failed' }
   | { kind: 'redirect'; project: ProjectInfo };
 
@@ -55,6 +55,7 @@ export class PanelSession {
   private entries: MergedEntry[] = [];
   private locations = new Map<string, SourceLocation>();
   private renderCounter = 0;
+  private selectCounter = 0;
 
   /**
    * @param current The project shown first.
@@ -146,9 +147,11 @@ export class PanelSession {
    * @param message The select message from the webview.
    * @param isOpenElsewhere Tells whether another panel already shows a project.
    * @returns `redirect` when the requested project is open in another panel (nothing changes),
-   * `failed` when the target could not be described (nothing changes), else `applied`.
+   * `failed` when the target could not be described or a newer select started meanwhile (nothing
+   * changes), else `applied` with the project it replaced.
    */
   async select(message: SelectMessage, isOpenElsewhere: (project: ProjectInfo) => boolean): Promise<SelectOutcome> {
+    const token = ++this.selectCounter;
     try {
       let target = this.current;
       if (message.projectId !== undefined && message.projectId !== this.current.id) {
@@ -163,7 +166,11 @@ export class PanelSession {
       const projectChanged = target !== this.current;
       const needsDescription = projectChanged || (message.profile !== undefined && message.profile !== null);
       const description = needsDescription ? await this.deps.createProvider(target).describe(target) : undefined;
+      if (token !== this.selectCounter) {
+        return { kind: 'failed' };
+      }
       const selection = nextSelection(this.selection, message, description, projectChanged);
+      const previous = this.current;
       if (projectChanged) {
         this.current = target;
         this.reveals = new RevealState();
@@ -173,7 +180,7 @@ export class PanelSession {
       }
       this.selection = selection;
       this.selectionReady = true;
-      return { kind: 'applied', projectChanged };
+      return { kind: 'applied', projectChanged, previous };
     } catch {
       return { kind: 'failed' };
     }

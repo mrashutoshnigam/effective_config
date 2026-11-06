@@ -122,7 +122,7 @@ describe('PanelSession.select', () => {
   it('selecting a profile takes its environment — and an unknown or env-less profile falls back to Development', async () => {
     const s = session(new FakeProvider([]));
     await s.render();
-    expect(await s.select({ type: 'select', profile: 'cli' }, () => false)).toEqual({ kind: 'applied', projectChanged: false });
+    expect(await s.select({ type: 'select', profile: 'cli' }, () => false)).toMatchObject({ kind: 'applied', projectChanged: false });
     expect((await s.render()).state).toMatchObject({ profile: 'cli', environment: 'Development' });
   });
 
@@ -154,11 +154,29 @@ describe('PanelSession.select', () => {
     await s.render();
     s.setReveal('DbPassword', true);
     expect(find((await s.render()).state.root, 'DbPassword')?.revealed).toBe(true);
-    expect(await s.select({ type: 'select', projectId: 'b' }, () => false)).toEqual({ kind: 'applied', projectChanged: true });
+    expect(await s.select({ type: 'select', projectId: 'b' }, () => false)).toMatchObject({ kind: 'applied', projectChanged: true });
     expect(s.project).toBe(b);
     const state = (await s.render()).state;
     expect(state.projectId).toBe('b');
     expect(find(state.root, 'DbPassword')?.revealed).toBe(false);
+  });
+
+  it('drops an overtaken select — after A to B then A to C, the slower B never commits and C stays shown', async () => {
+    const [a, b, c] = [project('a'), project('b'), project('c')];
+    let releaseB!: () => void;
+    const gateB = new Promise<void>((resolve) => { releaseB = resolve; });
+    const provider: ConfigProvider = {
+      describe: async (p) => { if (p.id === 'b') { await gateB; } return DESCRIPTION; },
+      buildLayers: async () => ({ layers: [], diagnostics: [], watchPaths: [] }),
+    };
+    const s = session(provider, [a, b, c]);
+    const toB = s.select({ type: 'select', projectId: 'b' }, () => false);
+    const toC = await s.select({ type: 'select', projectId: 'c' }, () => false);
+    releaseB();
+    const bResult = await toB;
+    expect(toC).toMatchObject({ kind: 'applied', projectChanged: true, previous: a });
+    expect(bResult).toEqual({ kind: 'failed' });
+    expect(s.project).toBe(c);
   });
 
   it('asks the caller to switch panels when the requested project is open elsewhere — nothing changes here', async () => {
@@ -171,7 +189,7 @@ describe('PanelSession.select', () => {
 
   it('ignores a request for an unknown project id', async () => {
     const s = session(new FakeProvider([]));
-    expect(await s.select({ type: 'select', projectId: 'zzz' }, () => false)).toEqual({ kind: 'applied', projectChanged: false });
+    expect(await s.select({ type: 'select', projectId: 'zzz' }, () => false)).toMatchObject({ kind: 'applied', projectChanged: false });
     expect(s.project.id).toBe('a');
   });
 });
