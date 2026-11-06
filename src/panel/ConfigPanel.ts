@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import { createProvider, projectTag } from '../ecosystem';
-import { ECOSYSTEMS } from '../hostEcosystems';
+import { ECOSYSTEMS, currentSettings } from '../hostEcosystems';
 import { normalizeKey } from '../engine/keys';
 import { copyText, exportText } from './actions';
 import { mergeLayers } from '../engine/merge';
@@ -14,9 +14,6 @@ import type { HostMessage, ViewNode, ViewState, WebviewMessage } from './message
 import { nextSelection } from './selection';
 import { RevealState, toViewModel } from './viewModel';
 import { watchTargetKey, watchTargetsFor, type WatchTarget } from './watchTargets';
-
-/** Default mask patterns (glob, case-insensitive). */
-const DEFAULT_MASK_PATTERNS = ['*Password*', '*Secret*', '*Key*', '*TOKEN*', 'ConnectionStrings:*'];
 
 /** Delay in milliseconds before a file change triggers a re-render. */
 const REFRESH_DEBOUNCE_MS = 200;
@@ -206,7 +203,7 @@ export class ConfigPanel {
 
   /** Reads the mask patterns setting. */
   private maskPatterns(): string[] {
-    return vscode.workspace.getConfiguration('effectiveConfig').get<string[]>('maskPatterns') ?? DEFAULT_MASK_PATTERNS;
+    return currentSettings().maskPatterns;
   }
 
   /** Builds the full HTML document of the webview. */

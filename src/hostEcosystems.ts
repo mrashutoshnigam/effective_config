@@ -2,22 +2,15 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { DotnetProvider } from './dotnet/dotnetProvider';
-import { DEFAULT_JSON_LAYERS } from './dotnet/environments';
 import type { Ecosystem } from './ecosystem';
 import type { ProjectInfo } from './provider';
-import { DEFAULT_ENV_FILES, DEFAULT_ENV_NAME_VARIABLES } from './python/environments';
 import { dropFallbackInDotnetRoots, findPythonProjects } from './python/projectDiscovery';
 import { PythonProvider } from './python/pythonProvider';
+import { readSettings, pythonExcludeGlob, pythonMarkerGlob, type Settings } from './settings';
 import { nodeFileSystem } from './sources/fileSystem';
 
 /** Matches `.env` and `.env.*` file names (case-insensitive). */
 const ENV_FILE_NAME = /^\.env(\..*)?$/i;
-
-/** Glob of files marking a Python project. */
-const PYTHON_MARKER_GLOB = '**/{pyproject.toml,requirements.txt,setup.py,setup.cfg,Pipfile}';
-
-/** Glob of folders ignored when looking for Python project markers. */
-const PYTHON_EXCLUDE_GLOB = '**/{node_modules,.venv,venv,env,__pycache__,site-packages,.git,bin,obj}/**';
 
 /** Returns a copy of `process.env` without undefined values. */
 function osEnvironment(): Record<string, string> {
@@ -30,9 +23,10 @@ function osEnvironment(): Record<string, string> {
   return env;
 }
 
-/** Reads the `effectiveConfig` settings section. */
-function settings(): vscode.WorkspaceConfiguration {
-  return vscode.workspace.getConfiguration('effectiveConfig');
+/** Reads the current extension settings with defaults applied. */
+export function currentSettings(): Settings {
+  const section = vscode.workspace.getConfiguration('effectiveConfig');
+  return readSettings({ get: <T>(key: string) => section.get<T>(key) });
 }
 
 /**
@@ -74,7 +68,7 @@ const DOTNET: Ecosystem = {
       osEnv: osEnvironment(),
       platform: process.platform,
       homeDir: os.homedir(),
-      jsonLayers: settings().get<string[]>('dotnet.jsonLayers') ?? DEFAULT_JSON_LAYERS,
+      jsonLayers: currentSettings().dotnet.jsonLayers,
     }),
 };
 
@@ -83,22 +77,18 @@ const PYTHON: Ecosystem = {
   kind: 'python',
   tag: '[Python]',
   async discover(found) {
-    const markers = await vscode.workspace.findFiles(PYTHON_MARKER_GLOB, PYTHON_EXCLUDE_GLOB);
+    const markers = await vscode.workspace.findFiles(pythonMarkerGlob(), pythonExcludeGlob());
     const roots = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
     const python = await findPythonProjects(markers.map((u) => u.fsPath), roots, nodeFileSystem);
     return dropFallbackInDotnetRoots(python, found.filter((p) => p.kind === 'dotnet'), roots);
   },
   createProvider(project) {
-    const config = settings();
+    const python = currentSettings().python;
     return new PythonProvider({
       fs: nodeFileSystem,
       osEnv: osEnvironment(),
       workspaceRoot: vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project.dir))?.uri.fsPath ?? project.dir,
-      envFiles: config.get<string[]>('python.envFiles') ?? DEFAULT_ENV_FILES,
-      fileOverridesOs: config.get<boolean>('python.fileOverridesOs') ?? false,
-      envPrefixes: config.get<string[]>('python.envPrefixes') ?? [],
-      nestedDelimiter: config.get<string>('python.nestedDelimiter') ?? '__',
-      environmentVariables: config.get<string[]>('python.environmentVariables') ?? DEFAULT_ENV_NAME_VARIABLES,
+      ...python,
     });
   },
   ownsFileName: (fileName) => ENV_FILE_NAME.test(fileName),
