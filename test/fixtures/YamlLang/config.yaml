@@ -1,0 +1,14 @@
+# Base configuration: anchors, merge keys, nesting and arrays.
+defaults: &defaults
+  Retries: 3
+  Host: default-host
+
+Service:
+  <<: *defaults
+  Host: service-host
+
+Servers:
+  - alpha
+  - beta
+
+Feature: true

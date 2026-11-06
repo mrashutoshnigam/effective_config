@@ -1,0 +1,5 @@
+# Environment override spread over two documents.
+Service:
+  Retries: 5
+---
+Feature: false
