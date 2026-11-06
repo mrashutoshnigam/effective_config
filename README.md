@@ -73,11 +73,11 @@ Set `effectiveConfig.python.fileOverridesOs` to move the files above OS variable
 
 ## Adding a language provider
 
-1. Create a folder `src/<language>/` with a `ConfigProvider`. For dotenv-style languages, extend `DotenvProviderBase` (`src/sources/dotenvProvider.ts`) and implement `describe`; override `readProcessEnvironment` if something other than the OS sets process variables.
+1. Create a folder `src/<language>/` with a `ConfigProvider`. For dotenv-style languages, extend `DotenvProviderBase` (`src/sources/dotenvProviderBase.ts`) and implement `describe`; it provides environment detection, and `src/sources/dotenvEnvironments.ts` lists environments and watch globs. Override `readProcessEnvironment` if something other than the OS sets process variables.
 2. Export an `Ecosystem` from that folder (`src/<language>/ecosystem.ts`): its kind, picker tag, discovery and provider factory.
-3. Add it to `ECOSYSTEMS` in `src/hostEcosystems.ts`.
+3. Add it to `ECOSYSTEMS` in `src/hostEcosystems.ts`, before Python: Python's fallback project gives way to projects the earlier ecosystems found.
 
-New settings and Explorer or editor-title triggers for other file names are declared in `package.json`.
+Everything else stays in the folder: layers may use their own `kind`, and settings are read with `settingsSource()` from `src/hostServices.ts`. The one exception is the VS Code manifest: new settings and Explorer or editor-title triggers for other file names must be declared in `package.json`.
 
 ## License
 
