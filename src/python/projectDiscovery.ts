@@ -1,6 +1,9 @@
 import type { FileSystem } from '../sources/fileSystem';
 import type { ProjectInfo } from '../provider';
 
+/** Kind of a Python project. */
+export const PYTHON_KIND = 'python';
+
 /** Files whose presence marks a directory as a Python project, in id-preference order. */
 export const PYTHON_MARKERS: string[] = ['pyproject.toml', 'requirements.txt', 'setup.py', 'setup.cfg', 'Pipfile'];
 
@@ -44,7 +47,7 @@ function hasEnvFile(names: string[]): boolean {
  * @param markerPaths Absolute paths of marker files found in the workspace.
  * @param workspaceRoots Absolute workspace folder paths.
  * @param fs File system used to list directories.
- * @returns Projects (`kind: 'python'`) sorted by name, then directory. A project's `id` and
+ * @returns Projects of {@link PYTHON_KIND} sorted by name, then directory. A project's `id` and
  * `projectFile` are its first marker in {@link PYTHON_MARKERS} order (the `.env` path for fallback projects).
  */
 export async function findPythonProjects(
@@ -81,7 +84,7 @@ export async function findPythonProjects(
     const first = PYTHON_MARKERS.find((m) => markers.has(m));
     const file = first === undefined ? undefined : markers.get(first);
     if (file !== undefined) {
-      projects.push({ id: file, name: basename(dir), dir, projectFile: file, kind: 'python' });
+      projects.push({ id: file, name: basename(dir), dir, projectFile: file, kind: PYTHON_KIND });
     }
   }
 
@@ -94,7 +97,7 @@ export async function findPythonProjects(
     const envName = (await fs.listDir(root)).find((n) => n.toLowerCase() === '.env');
     if (envName !== undefined) {
       const file = join(root, envName);
-      projects.push({ id: file, name: basename(root), dir: root, projectFile: file, kind: 'python' });
+      projects.push({ id: file, name: basename(root), dir: root, projectFile: file, kind: PYTHON_KIND });
     }
   }
 
@@ -104,21 +107,22 @@ export async function findPythonProjects(
 
 /**
  * Drops root-fallback Python projects (no marker file, `.env` at a workspace root) whose root already
- * contains a .NET project at or under it, so a .NET repo with a stray `.env` gets no bogus Python project.
+ * contains a project of another language at or under it, so a repo of that language with a stray
+ * `.env` gets no bogus Python project.
  * @param python Discovered Python projects.
- * @param dotnet Discovered .NET projects.
+ * @param others Projects of the other languages.
  * @param workspaceRoots Absolute workspace folder paths.
  * @returns The Python projects without those fallback projects; marker-based projects are always kept.
  */
-export function dropFallbackInDotnetRoots(
+export function dropFallbackInClaimedRoots(
   python: ProjectInfo[],
-  dotnet: ProjectInfo[],
+  others: ProjectInfo[],
   workspaceRoots: string[],
 ): ProjectInfo[] {
   const roots = new Set(workspaceRoots.map(norm));
   return python.filter((p) => {
     const dir = norm(p.dir);
     const isFallback = roots.has(dir) && basename(p.projectFile).toLowerCase() === '.env';
-    return !(isFallback && dotnet.some((d) => norm(d.dir) === dir || norm(d.dir).startsWith(dir + '/')));
+    return !(isFallback && others.some((d) => norm(d.dir) === dir || norm(d.dir).startsWith(dir + '/')));
   });
 }
