@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import { createProvider, projectTag } from '../ecosystem';
 import { ECOSYSTEMS, currentSettings } from '../hostEcosystems';
 import type { ProjectInfo } from '../provider';
-import type { HostMessage, ViewState, WebviewMessage } from './messages';
+import { isWebviewMessage, type HostMessage, type ViewState, type WebviewMessage } from './messages';
 import { PanelSession } from './session';
 import { watchTargetKey, watchTargetsFor, type WatchTarget } from './watchTargets';
 
@@ -35,33 +35,6 @@ function isDirectory(dir: string): boolean {
 /** Creates a random nonce for the webview content security policy. */
 function createNonce(): string {
   return randomBytes(16).toString('hex');
-}
-
-/** Type guard validating the shape of a message received from the webview. */
-function isWebviewMessage(value: unknown): value is WebviewMessage {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const m = value as Record<string, unknown>;
-  const optString = (v: unknown): boolean => v === undefined || typeof v === 'string';
-  switch (m.type) {
-    case 'ready':
-    case 'refresh':
-    case 'exportMenu':
-      return true;
-    case 'select':
-      return optString(m.projectId) && (m.profile === null || optString(m.profile)) && optString(m.environment);
-    case 'reveal':
-      return typeof m.path === 'string' && typeof m.revealed === 'boolean';
-    case 'openSource':
-      return typeof m.locationId === 'string';
-    case 'copy':
-      return typeof m.path === 'string' && (m.what === 'value' || m.what === 'keyPath' || m.what === 'envVarName');
-    case 'export':
-      return (m.format === 'json' || m.format === 'env') && typeof m.revealAll === 'boolean';
-    default:
-      return false;
-  }
 }
 
 /** An editor-tab webview showing the merged configuration of one project. */
