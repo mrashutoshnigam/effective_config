@@ -3,7 +3,7 @@ import type { Diagnostic, Layer, LayerEntry } from '../engine/types';
 import { delimitedNameToKey, normalizeKey } from '../engine/keys';
 import type { ConfigProvider, LayerBuild, ProjectDescription, ProjectInfo, Selection } from '../provider';
 import { resolveJsonLayerFiles } from '../dotnet/environments';
-import type { FileSystem } from '../dotnet/fileSystem';
+import type { FileSystem } from '../sources/fileSystem';
 import { expandDotenvValue, parseDotenv, type DotenvEntry } from '../sources/dotenv';
 import { listPythonEnvironments } from './environments';
 import { parsePythonLaunchConfigs, type PythonLaunchConfig } from './launchJson';

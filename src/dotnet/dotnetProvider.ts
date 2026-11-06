@@ -7,7 +7,7 @@ import { envVarEntries, filterOsEnv } from '../sources/envVars';
 import { parseCommandLineArgs } from '../sources/commandLine';
 import { parseLaunchSettings, type LaunchProfile } from './launchSettings';
 import { listEnvironments, resolveJsonLayerFiles } from './environments';
-import type { FileSystem } from './fileSystem';
+import type { FileSystem } from '../sources/fileSystem';
 import { readUserSecretsId, userSecretsPath } from './userSecrets';
 
 /** Construction options of {@link DotnetProvider}. */

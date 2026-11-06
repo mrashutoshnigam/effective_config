@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import { DotnetProvider } from '../dotnet/dotnetProvider';
 import { DEFAULT_JSON_LAYERS } from '../dotnet/environments';
-import { nodeFileSystem } from '../dotnet/fileSystem';
+import { nodeFileSystem } from '../sources/fileSystem';
 import { DEFAULT_ENV_FILES, DEFAULT_ENV_NAME_VARIABLES } from '../python/environments';
 import { PythonProvider } from '../python/pythonProvider';
 import { normalizeKey } from '../engine/keys';

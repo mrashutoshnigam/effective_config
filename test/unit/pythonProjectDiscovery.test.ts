@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { FileSystem } from '../../src/dotnet/fileSystem';
+import type { FileSystem } from '../../src/sources/fileSystem';
 import type { ProjectInfo } from '../../src/provider';
 import { dropFallbackInDotnetRoots, findPythonProjects, IGNORED_FOLDERS, PYTHON_MARKERS } from '../../src/python/projectDiscovery';
 

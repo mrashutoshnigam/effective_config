@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { nodeFileSystem } from './dotnet/fileSystem';
+import { nodeFileSystem } from './sources/fileSystem';
 import { findOwningProject } from './dotnet/projectDiscovery';
 import { dropFallbackInDotnetRoots, findPythonProjects } from './python/projectDiscovery';
 import type { ProjectInfo } from './provider';
