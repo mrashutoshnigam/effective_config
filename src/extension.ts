@@ -34,14 +34,14 @@ async function showCommand(context: vscode.ExtensionContext, uri?: vscode.Uri): 
   if (uri) {
     const owner = findOwningProject(uri.fsPath, projects, preferredKindForFile(ECOSYSTEMS, path.basename(uri.fsPath)));
     if (!owner) {
-      void vscode.window.showErrorMessage('No .NET or Python project owns this file.');
+      void vscode.window.showErrorMessage('No supported project owns this file.');
       return;
     }
     ConfigPanel.show(context, owner, projects);
     return;
   }
   if (projects.length === 0) {
-    void vscode.window.showInformationMessage('No .NET or Python projects found in this workspace.');
+    void vscode.window.showInformationMessage('No supported projects found in this workspace.');
     return;
   }
   if (projects.length === 1) {
