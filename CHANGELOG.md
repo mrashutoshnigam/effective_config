@@ -5,6 +5,7 @@
 - Internal: shared `DotenvProviderBase` (env file layers, `{env}` patterns, expansion, OS filtering) now backs the Python provider; behaviour is unchanged.
 - Internal: each ecosystem lives in its own folder and is registered with one line in `src/hostEcosystems.ts`.
 - "No project" messages no longer name specific languages.
+- Internal: `parseYamlLayer` reads YAML layers with line and column provenance (multiple documents, anchors, merge keys). No language uses it yet.
 
 ## 0.2.0
 
