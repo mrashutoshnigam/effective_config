@@ -1,8 +1,8 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { findOwningProject } from './dotnet/projectDiscovery';
-import { discoverProjects, preferredKindForFile, projectTag } from './ecosystem';
-import { ECOSYSTEMS } from './hostEcosystems';
+import { discoverProjects, preferredKindForFile, projectTag, type Ecosystem } from './ecosystem';
+import { ECOSYSTEMS, registerEcosystem } from './hostEcosystems';
 import type { ProjectInfo } from './provider';
 import { ConfigPanel } from './panel/ConfigPanel';
 import type { ViewState, WebviewMessage } from './panel/messages';
@@ -17,6 +17,13 @@ export interface ExtensionApi {
    * @returns Resolves after the resulting render and post completed.
    */
   sendMessage(message: WebviewMessage): Promise<void>;
+  /**
+   * Test hook: adds an ecosystem to the registry. Present only when the extension runs in test mode,
+   * so other extensions cannot add providers in production.
+   * @param ecosystem The ecosystem to add.
+   * @returns Removes the ecosystem again.
+   */
+  registerEcosystem?(ecosystem: Ecosystem): vscode.Disposable;
 }
 
 /** Discovers the projects of every registered ecosystem. */
@@ -66,7 +73,11 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   context.subscriptions.push(
     vscode.commands.registerCommand('effectiveConfig.show', (uri?: vscode.Uri) => showCommand(context, uri)),
   );
-  return { getPanelState: () => ConfigPanel.activeState, sendMessage: (message) => ConfigPanel.sendMessage(message) };
+  return {
+    getPanelState: () => ConfigPanel.activeState,
+    sendMessage: (message) => ConfigPanel.sendMessage(message),
+    ...(context.extensionMode === vscode.ExtensionMode.Test ? { registerEcosystem } : {}),
+  };
 }
 
 /**
