@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import type { Diagnostic, Layer } from '../engine/types';
 import type { ProjectDescription, ProjectInfo, Selection } from '../provider';
+import { DOTENV_WATCH_GLOBS } from '../sources/dotenvEnvironments';
 import { DotenvProviderBase, VarMap, type DotenvProviderOptions, type ProcessEnvironment } from '../sources/dotenvProviderBase';
 import { listPythonEnvironments } from './environments';
 import { parsePythonLaunchConfigs, type PythonLaunchConfig } from './launchJson';
@@ -9,14 +10,10 @@ import { parsePythonLaunchConfigs, type PythonLaunchConfig } from './launchJson'
 export interface PythonProviderOptions extends DotenvProviderOptions {
   /** Workspace folder; the upper bound of the launch.json search and the base of relative `envFile` paths. */
   workspaceRoot: string;
-  /** Names of the variables that select the environment, in priority order. */
-  environmentVariables: string[];
 }
 
 const LABEL_OS_WINS = 'Simulated — python-dotenv order (OS variables win)';
 const LABEL_FILES_WIN = 'Simulated — python-dotenv order (files override OS)';
-const WATCH_GLOBS = ['.env', '.env.*'];
-const DEFAULT_ENVIRONMENT = 'development';
 
 /** Normalizes a path for containment comparison: forward slashes, lower case, no trailing slash. */
 function normPath(p: string): string {
@@ -63,37 +60,13 @@ export class PythonProvider extends DotenvProviderBase<PythonProviderOptions> {
   }
 
   /**
-   * Determines the environment name: sources outer (profile env, profile envFile, `.env`, OS), the
-   * configured variable names inner; the first source that defines one of them with a non-empty value wins.
+   * Lists the variable sources a launch profile adds to environment detection.
+   * @param profile The launch profile.
+   * @returns The profile's `env`, then its `envFile` when it has one.
    */
-  private async detectEnvironment(project: ProjectInfo, files: string[], profile?: PythonLaunchConfig): Promise<string> {
-    const os = this.osVars();
-    const sources: VarMap[] = [];
-    if (profile) {
-      sources.push(VarMap.from(profile.env));
-      if (profile.envFile !== undefined) {
-        sources.push(await this.fileVars(profile.envFile, os));
-      }
-    }
-    const dotenvName = files.find((f) => f.toLowerCase() === '.env');
-    if (dotenvName !== undefined) {
-      sources.push(await this.fileVars(path.join(project.dir, dotenvName), os));
-    }
-    sources.push(os);
-    for (const source of sources) {
-      for (const name of this.options.environmentVariables) {
-        const value = source.get(name)?.trim();
-        if (value) {
-          return value;
-        }
-      }
-    }
-    return DEFAULT_ENVIRONMENT;
-  }
-
-  /** Reads an env file into a variable map (empty when missing), values expanded against `os`. */
-  private async fileVars(file: string, os: VarMap): Promise<VarMap> {
-    return (await this.readExpandedFile(file, os))?.vars ?? new VarMap();
+  private async profileSources(profile: PythonLaunchConfig): Promise<VarMap[]> {
+    const env = VarMap.from(profile.env);
+    return profile.envFile === undefined ? [env] : [env, await this.fileVars(profile.envFile)];
   }
 
   /** @inheritdoc */
@@ -103,7 +76,7 @@ export class PythonProvider extends DotenvProviderBase<PythonProviderOptions> {
     const launch = await this.readLaunch(project);
     const profileEnvironments: Record<string, string> = {};
     for (const config of launch.configs) {
-      profileEnvironments[config.name] = await this.detectEnvironment(project, files, config);
+      profileEnvironments[config.name] = await this.detectEnvironment(project, files, await this.profileSources(config));
     }
     const first = launch.configs[0];
     const defaultSelection: Selection = first
@@ -116,7 +89,7 @@ export class PythonProvider extends DotenvProviderBase<PythonProviderOptions> {
       defaultSelection,
       mergeLabel: fileOverridesOs ? LABEL_FILES_WIN : LABEL_OS_WINS,
       envVarSeparator: nestedDelimiter || '__',
-      watchGlobs: [...WATCH_GLOBS],
+      watchGlobs: [...DOTENV_WATCH_GLOBS],
     };
   }
 

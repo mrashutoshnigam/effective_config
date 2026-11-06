@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { delimitedNameToKey, normalizeKey } from '../engine/keys';
 import type { Diagnostic, Layer, LayerEntry } from '../engine/types';
 import type { ConfigProvider, LayerBuild, ProjectDescription, ProjectInfo, Selection } from '../provider';
@@ -19,7 +20,12 @@ export interface DotenvProviderOptions {
   envPrefixes: string[];
   /** Delimiter splitting variable names into key segments; empty keeps keys flat. */
   nestedDelimiter: string;
+  /** Names of the variables that select the environment, in priority order. */
+  environmentVariables: string[];
 }
+
+/** Environment assumed when no source names one. */
+const DEFAULT_ENVIRONMENT = 'development';
 
 /** Case-insensitive variable store (names compared lower-cased). */
 export class VarMap {
@@ -171,6 +177,38 @@ export abstract class DotenvProviderBase<O extends DotenvProviderOptions = Doten
     const vars = new VarMap();
     const entries = this.expandEntries(parsed.entries, (n) => base.get(n) ?? vars.get(n), vars);
     return { entries, vars, diagnostics: parsed.diagnostics };
+  }
+
+  /**
+   * Determines the environment name. Sources are checked in order (`sources`, then `.env`, then the
+   * OS), and within a source the configured variable names; the first non-empty value wins.
+   * @param project Project being read.
+   * @param files File names in the project directory.
+   * @param sources Variable sources ranking above `.env` and the OS, highest first.
+   * @returns The environment name, `development` when no source names one.
+   */
+  protected async detectEnvironment(project: ProjectInfo, files: string[], sources: VarMap[] = []): Promise<string> {
+    const os = this.osVars();
+    const dotenvName = files.find((f) => f.toLowerCase() === '.env');
+    const dotenv = dotenvName === undefined ? [] : [await this.fileVars(path.join(project.dir, dotenvName))];
+    for (const source of [...sources, ...dotenv, os]) {
+      for (const name of this.options.environmentVariables) {
+        const value = source.get(name)?.trim();
+        if (value) {
+          return value;
+        }
+      }
+    }
+    return DEFAULT_ENVIRONMENT;
+  }
+
+  /**
+   * Reads an env file into a variable store, with values expanded against the OS.
+   * @param file Absolute path of the env file.
+   * @returns The values, empty when the file does not exist.
+   */
+  protected async fileVars(file: string): Promise<VarMap> {
+    return (await this.readExpandedFile(file, this.osVars()))?.vars ?? new VarMap();
   }
 
   /**
