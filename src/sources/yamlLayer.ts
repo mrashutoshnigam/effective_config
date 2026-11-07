@@ -10,8 +10,9 @@ import { stripBom } from './jsonLayer';
 const MAX_EXPANDED_NODES = 1_000_000;
 
 /**
- * Most characters the flattened keys of one file may total. Bounds memory, since each key repeats its
- * parents, so a short file with a long key can expand to gigabytes when the merge engine copies the keys.
+ * Most characters the flattened keys of one file and their references may total. Bounds memory, since each
+ * repeats its parents, so a short file with a long key can expand to gigabytes when the merge engine reads
+ * them.
  */
 const MAX_KEY_CHARS = 32_000_000;
 
@@ -60,7 +61,7 @@ interface FlatPair {
 interface ExpansionBudget {
   /** Nodes left; see {@link MAX_EXPANDED_NODES}. */
   nodes: number;
-  /** Flattened key characters left; see {@link MAX_KEY_CHARS}. */
+  /** Flattened key and reference characters left; see {@link MAX_KEY_CHARS}. */
   keyChars: number;
 }
 
@@ -266,7 +267,8 @@ class DocumentFlattener {
    * @throws YamlLayerError When the file's flattened keys grow too long.
    */
   private add(key: string, value: string | null, node: Node, origin: string | undefined): void {
-    this.budget.keyChars -= key.length;
+    const reference = origin && origin !== key ? origin : undefined;
+    this.budget.keyChars -= key.length + (reference?.length ?? 0);
     if (this.budget.keyChars < 0) {
       throw new YamlLayerError(`YAML keys total more than ${MAX_KEY_CHARS} characters when flattened`, startOf(node));
     }
@@ -274,7 +276,7 @@ class DocumentFlattener {
       key,
       value,
       location: this.loc(startOf(node)),
-      ...(origin && origin !== key ? { references: [origin] } : {}),
+      ...(reference === undefined ? {} : { references: [reference] }),
     });
   }
 
