@@ -551,6 +551,25 @@ describe('parseYamlLayer', () => {
     });
 
     /**
+     * Validates memory amplification through references, which a limit on keys alone misses: the aliased
+     * entries have short keys, yet each one's reference repeats the long anchored key, and the merge
+     * engine reads every reference. Expected: a 500 KB key reached from 200,000 entries, a 100 GB
+     * expansion from a 600 KB file, is one error from the limit.
+     */
+    it.each([
+      ['an alias', (i: number) => `o${i}: *a`],
+      ['a merge key', (i: number) => `o${i}: {<<: *a}`],
+    ])('stops a long anchored key repeated through %s with one error', (_name, use) => {
+      const leaves = Array.from({ length: 20 }, (_, i) => `k${i}: 1`).join(', ');
+      const uses = Array.from({ length: 10_000 }, (_, i) => use(i)).join('\n');
+      const r = parseYamlLayer(`? ${'k'.repeat(500_000)}\n: &a {${leaves}}\n${uses}\n`, 'f.yaml');
+      expect(r.entries).toEqual([]);
+      expect(r.diagnostics).toHaveLength(1);
+      expect(r.diagnostics[0]).toMatchObject({ severity: 'error' });
+      expect(r.diagnostics[0].message).toMatch(/characters when flattened$/);
+    });
+
+    /**
      * Validates that the single-pass alias resolution stays linear, since the library's own resolver
      * rescans the document per alias. Expected: 20000 aliases load, each with its value.
      */
