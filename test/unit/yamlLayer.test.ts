@@ -260,12 +260,42 @@ describe('parseYamlLayer', () => {
       ['a merge list', 'ConnectionStrings: &cs {main: hunter2}\nother:\n  <<: [*cs]\n', 'other:main'],
       ['a merge chain', 'ConnectionStrings: &cs {main: hunter2}\nmid: &mid\n  <<: *cs\nother:\n  <<: *mid\n', 'other:main'],
       ['an alias inside a merge', 'db: {password: &pw hunter2}\nbase: &b {v: *pw}\nother:\n  <<: *b\n', 'other:v'],
+      ['a merge beside its anchor', 'ConnectionStrings: &cs {main: hunter2}\n<<: *cs\n', 'main'],
+      ['a merge above a nested anchor', 'db: {password: &p {main: hunter2}}\n<<: *p\n', 'main'],
+      ['an alias to an anchor under a merge', 'ConnectionStrings:\n  <<: &cs {main: hunter2}\nother: *cs\n', 'other:main'],
+      ['a merge of an anchor under a merge', 'ConnectionStrings:\n  <<: &cs {main: hunter2}\nother:\n  <<: *cs\n', 'other:main'],
+      ['an anchor in a merge list', 'ConnectionStrings:\n  <<: [&cs {main: hunter2}]\nother:\n  <<: *cs\n', 'other:main'],
+      ['an anchored sequence as merge sources', 'ConnectionStrings: &s [{main: hunter2}]\nother:\n  <<: *s\n', 'other:main'],
+      ['an anchor in a shadowed merge value', 'ConnectionStrings:\n  <<: {main: &v hunter2}\n  main: x\nother: *v\n', 'other'],
     ])('keeps a secret masked through %s', (_name, text, key) => {
       const entries = parseYamlLayer(`${text}plain: 1\n`, 'f.yaml').entries;
       const layer: Layer = { id: 'f', label: 'f', kind: 'yaml', sensitive: false, entries };
       const merged = mergeLayers([layer], ['*Password*', 'ConnectionStrings:*']);
       expect(merged.find((m) => m.key === key)?.sensitive).toBe(true);
       expect(merged.find((m) => m.key === 'plain')?.sensitive).toBe(false);
+    });
+
+    /**
+     * Validates that an anchor's source key does not depend on flattening order: the merge expands before
+     * its sibling is flattened, yet the anchor is already defined. Expected: the merged entry names the
+     * anchored key.
+     */
+    it('references an anchor defined beside the merge that uses it', () => {
+      const { entries } = parseYamlLayer('ConnectionStrings: &cs {main: hunter2}\n<<: *cs\n', 'f.yaml');
+      expect(entries.find((e) => e.key === 'main')?.references).toEqual(['ConnectionStrings:main']);
+    });
+
+    /**
+     * Validates that a key does not reference itself: a mapping anchored directly under `<<` contributes
+     * its keys at the path it was defined for, which the panel would otherwise show as "uses: u:x".
+     * Expected: no references on either entry.
+     */
+    it.each([
+      ['a nested mapping', 'u:\n  <<: &m {x: 1}\n', 'u:x'],
+      ['the root', '<<: &m {x: 1}\n', 'x'],
+    ])('records no self-reference for an anchor under a merge in %s', (_name, text, key) => {
+      const { entries } = parseYamlLayer(text, 'f.yaml');
+      expect(entries.map((e) => [e.key, e.references])).toEqual([[key, undefined]]);
     });
 
     /**
