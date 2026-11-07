@@ -72,6 +72,14 @@ interface MergeSlot {
   merge: Node | null;
 }
 
+/** A mapping named by a merge value. */
+interface MergeSource {
+  /** The mapping whose keys are merged. */
+  map: YAMLMap;
+  /** Flattened key the mapping was defined at; undefined for an inline mapping with no anchor. */
+  path: string | undefined;
+}
+
 /**
  * Converts a scalar to its configuration value: strings decoded, null as `""`, anything else as raw
  * source text, because each consumer parses configuration strings its own way.
@@ -171,7 +179,7 @@ class DocumentFlattener {
   private readonly active = new Set<Node>();
   /** Entries produced so far, in source order. */
   private readonly entries: LayerEntry[] = [];
-  /** Flattened key of each anchored node, recorded where it is defined. */
+  /** Flattened key of each anchored node, where it is written. Filled before flattening starts. */
   private readonly anchorPaths = new Map<Node, string>();
 
   /**
@@ -201,8 +209,50 @@ class DocumentFlattener {
     if (!isMap(root)) {
       throw new YamlLayerError('root must be a mapping', startOf(root));
     }
+    this.recordAnchors(root, '', 0);
     this.flatten(root, '', 0);
     return this.entries;
+  }
+
+  /**
+   * Records the flattened key of every anchored node below a node. Runs ahead of flattening because a
+   * merge expands before its siblings are flattened and an inline merge source is never flattened itself,
+   * yet aliases to either must still name the anchored key. Aliases are not followed, so the work is
+   * linear in the size of the file, and a key is recorded even when the merge that holds it is shadowed.
+   * @param node Node to walk; aliases and missing values have nothing to record.
+   * @param path Flattened key of the node; empty at the root.
+   * @param depth Current nesting.
+   * @throws YamlLayerError When the document nests too deep or has a key with no flat form.
+   */
+  private recordAnchors(node: Node | null, path: string, depth: number): void {
+    if (depth > MAX_NESTING) {
+      throw new YamlLayerError(`YAML nests deeper than ${MAX_NESTING} levels`, node ? startOf(node) : 0);
+    }
+    if (node?.anchor) {
+      this.anchorPaths.set(node, path);
+    }
+    if (isMap(node)) {
+      for (const pair of node.items as Pair<Node, Node | null>[]) {
+        if (!isMergeKey(pair.key)) {
+          this.recordAnchors(pair.value, joinKey(path, this.keySegment(pair.key)), depth + 1);
+        } else if (isSeq(pair.value)) {
+          // Merge list items contribute their keys to this mapping, so they take its path, not an index.
+          if (pair.value.anchor) {
+            this.anchorPaths.set(pair.value, path);
+          }
+          for (const item of pair.value.items as Node[]) {
+            this.recordAnchors(item, path, depth + 1);
+          }
+        } else {
+          this.recordAnchors(pair.value, path, depth + 1);
+        }
+      }
+    } else if (isSeq(node)) {
+      let index = 0;
+      for (const item of node.items as Node[]) {
+        this.recordAnchors(item, joinKey(path, String(index++)), depth + 1);
+      }
+    }
   }
 
   /**
@@ -211,7 +261,8 @@ class DocumentFlattener {
    * @param value Entry value.
    * @param node Node holding the value.
    * @param origin Key the value was reached from through an alias or merge key. Recorded as a reference,
-   * so the merge engine keeps the value masked when that key is sensitive.
+   * so the merge engine keeps the value masked when that key is sensitive. Ignored when it names the entry
+   * itself or the root, as for a mapping anchored directly under the `<<` it is merged by.
    * @throws YamlLayerError When the file's flattened keys grow too long.
    */
   private add(key: string, value: string | null, node: Node, origin: string | undefined): void {
@@ -223,7 +274,7 @@ class DocumentFlattener {
       key,
       value,
       location: this.loc(startOf(node)),
-      ...(origin === undefined ? {} : { references: [origin] }),
+      ...(origin && origin !== key ? { references: [origin] } : {}),
     });
   }
 
@@ -286,18 +337,20 @@ class DocumentFlattener {
    * @returns The source mappings, highest priority first.
    * @throws YamlLayerError When a source is not a mapping.
    */
-  private mergeSources(slot: MergeSlot): YAMLMap[] {
+  private mergeSources(slot: MergeSlot): MergeSource[] {
     if (slot.merge === null) {
       throw new YamlLayerError('Merge sources must be mappings', startOf(slot.key));
     }
     const value = this.deref(slot.merge);
     const candidates = isSeq(value) ? (value.items as Node[]) : [slot.merge];
-    return candidates.map((candidate) => {
+    // An item of an anchored sequence needs no anchor of its own: it is addressed through the sequence.
+    const listPath = isSeq(value) ? this.anchorPaths.get(value) : undefined;
+    return candidates.map((candidate, index) => {
       const source = this.deref(candidate);
       if (!isMap(source)) {
         throw new YamlLayerError('Merge sources must be mappings', startOf(candidate));
       }
-      return source;
+      return { map: source, path: this.anchorPaths.get(source) ?? originBelow(listPath, String(index)) };
     });
   }
 
@@ -331,8 +384,7 @@ class DocumentFlattener {
         result.push(slot);
         continue;
       }
-      for (const source of this.mergeSources(slot)) {
-        const sourcePath = this.anchorPaths.get(source);
+      for (const { map: source, path: sourcePath } of this.mergeSources(slot)) {
         this.active.add(source);
         for (const merged of this.pairsOf(source, path, depth + 1)) {
           if (!seen.has(merged.segment)) {
@@ -358,9 +410,6 @@ class DocumentFlattener {
     this.charge(node, depth);
     const target = this.deref(node);
     const origin = isAlias(node) ? this.anchorPaths.get(target) ?? inherited : inherited;
-    if (!isAlias(node) && target.anchor && !this.anchorPaths.has(target)) {
-      this.anchorPaths.set(target, path);
-    }
     if (isMap(target)) {
       this.active.add(target);
       const pairs = this.pairsOf(target, path, depth);
