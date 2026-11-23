@@ -13,6 +13,8 @@ export type NodeFrameworkSetting = (typeof NODE_FRAMEWORK_SETTINGS)[number];
 export interface NodePreset {
   /** The framework this preset simulates. */
   framework: NodeFramework;
+  /** Display name of the framework, used in the merge label. */
+  label: string;
   /** Env file patterns, lowest priority first; `{env}` is the mode placeholder. */
   envFiles: string[];
   /** Prefix of the variables exposed to client code, when the framework has one. */
@@ -36,6 +38,7 @@ export interface PresetSelection {
 /** Vite: `loadEnv` order, `VITE_` client prefix, mode from `MODE` then `NODE_ENV`. */
 const VITE: NodePreset = {
   framework: 'vite',
+  label: 'Vite',
   envFiles: ['.env', '.env.local', '.env.{env}', '.env.{env}.local'],
   clientPrefix: 'VITE_',
   environmentVariables: ['MODE', 'NODE_ENV'],
@@ -44,6 +47,7 @@ const VITE: NodePreset = {
 /** Next.js: `@next/env` order, `NEXT_PUBLIC_` client prefix, `.env.local` skipped under `test`. */
 const NEXT: NodePreset = {
   framework: 'next',
+  label: 'Next.js',
   envFiles: ['.env', '.env.{env}', '.env.local', '.env.{env}.local'],
   clientPrefix: 'NEXT_PUBLIC_',
   environmentVariables: ['NODE_ENV'],
@@ -54,6 +58,7 @@ const NEXT: NodePreset = {
 /** Create React App: the Next file order with the `REACT_APP_` client prefix. */
 const CRA: NodePreset = {
   framework: 'cra',
+  label: 'Create React App',
   envFiles: ['.env', '.env.{env}', '.env.local', '.env.{env}.local'],
   clientPrefix: 'REACT_APP_',
   environmentVariables: ['NODE_ENV'],
@@ -64,6 +69,7 @@ const CRA: NodePreset = {
 /** dotenv-flow: `.env.local` below the mode files and skipped under `test`; no client prefix. */
 const DOTENV_FLOW: NodePreset = {
   framework: 'dotenv-flow',
+  label: 'dotenv-flow',
   envFiles: ['.env', '.env.local', '.env.{env}', '.env.{env}.local'],
   environmentVariables: ['NODE_ENV'],
   skipLocalInTest: true,
@@ -72,6 +78,7 @@ const DOTENV_FLOW: NodePreset = {
 /** Fallback for unknown frameworks: the common Next/CRA file order, mode from `NODE_ENV`, no client prefix. */
 const GENERIC: NodePreset = {
   framework: 'generic',
+  label: 'generic',
   envFiles: ['.env', '.env.{env}', '.env.local', '.env.{env}.local'],
   environmentVariables: ['NODE_ENV'],
 };
