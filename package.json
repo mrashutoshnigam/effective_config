@@ -100,6 +100,27 @@
           ],
           "description": "Case-insensitive glob patterns of keys whose values are masked by default (* matches any characters, including ':')."
         },
+        "effectiveConfig.node.framework": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "vite",
+            "next",
+            "cra",
+            "dotenv-flow",
+            "generic"
+          ],
+          "enumDescriptions": [
+            "Detect the framework from the dependencies in package.json.",
+            "Vite: .env, .env.local, .env.[mode], .env.[mode].local; mode from MODE, then NODE_ENV; VITE_ prefix.",
+            "Next.js: .env, .env.[mode], .env.local, .env.[mode].local; .env.local skipped under test; NEXT_PUBLIC_ prefix.",
+            "Create React App: the Next.js order with the REACT_APP_ prefix.",
+            "dotenv-flow: .env, .env.local, .env.[mode], .env.[mode].local; .env.local skipped under test.",
+            "Generic: .env, .env.[mode], .env.local, .env.[mode].local; mode from NODE_ENV."
+          ],
+          "default": "auto",
+          "description": "Framework whose .env loading order a Node project (package.json with .env files) is simulated with. OS environment variables always win."
+        },
         "effectiveConfig.python.envFiles": {
           "type": "array",
           "items": {
