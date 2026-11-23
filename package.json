@@ -1,7 +1,7 @@
 {
   "name": "effective-config",
   "displayName": "Effective Config Viewer",
-  "description": "Shows the merged .NET appsettings or Python .env configuration for a chosen environment, with the source of every value.",
+  "description": "Shows the merged .NET appsettings, Python .env or Node .env configuration for a chosen environment, with the source of every value.",
   "version": "0.2.5",
   "publisher": "mrashutoshnigam",
   "icon": "media/icon.png",
@@ -28,6 +28,9 @@
     "environment variables",
     "dotnet",
     "python",
+    "node",
+    "vite",
+    "nextjs",
     ".env",
     "config",
     "env",
