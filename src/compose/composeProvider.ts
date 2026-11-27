@@ -107,7 +107,8 @@ export class ComposeProvider implements ConfigProvider {
    * @param envDir Directory the dropdown lists.
    * @param environments The dropdown's env files.
    * @returns The first `COMPOSE_ENV_FILES` entry (comma separated) when it names a listed file, written
-   * as a name, a relative path or an absolute path; else `.env`.
+   * as a name, a relative path or an absolute path, ignoring case on Windows as its file system does;
+   * else `.env`.
    */
   private defaultEnvFile(envDir: string, environments: string[]): string {
     const first = (this.options.osEnv.COMPOSE_ENV_FILES ?? '').split(',')[0].trim();
@@ -115,7 +116,9 @@ export class ComposeProvider implements ConfigProvider {
       return DEFAULT_ENV_FILE;
     }
     const name = path.relative(envDir, resolveFrom(envDir, first));
-    return environments.includes(name) ? name : DEFAULT_ENV_FILE;
+    const ignoreCase = (this.options.platform ?? process.platform) === 'win32';
+    const listed = environments.find((e) => (ignoreCase ? e.toLowerCase() === name.toLowerCase() : e === name));
+    return listed ?? DEFAULT_ENV_FILE;
   }
 
   /** @inheritdoc */
