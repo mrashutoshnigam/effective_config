@@ -83,6 +83,23 @@ describe('ComposeProvider.describe', () => {
     expect((await make({}, { osEnv: { COMPOSE_ENV_FILES: ' .env.prod ,.env' } }).describe(PROJECT)).defaultSelection.environment).toBe('.env.prod');
     expect((await make({}, { osEnv: { COMPOSE_ENV_FILES: 'nope.env' } }).describe(PROJECT)).defaultSelection.environment).toBe('.env');
   });
+
+  /**
+   * Validates other spellings of a `COMPOSE_ENV_FILES` entry naming a dropdown file. Expected: `./.env.prod`
+   * and the absolute path of `.env.prod` preselect `.env.prod`; the same name in another folder does not.
+   */
+  it('normalises the COMPOSE_ENV_FILES entry before matching the dropdown', async () => {
+    /**
+     * Describes the fixture with `COMPOSE_ENV_FILES` set.
+     * @param value The variable's value.
+     * @returns The preselected env file.
+     */
+    const preselected = async (value: string): Promise<string> =>
+      (await make({}, { osEnv: { COMPOSE_ENV_FILES: value } }).describe(PROJECT)).defaultSelection.environment;
+    expect(await preselected('./.env.prod')).toBe('.env.prod');
+    expect(await preselected(path.join(DIR, '.env.prod'))).toBe('.env.prod');
+    expect(await preselected('../q/.env.prod')).toBe('.env');
+  });
 });
 
 describe('ComposeProvider project directory', () => {
