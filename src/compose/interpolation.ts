@@ -1,8 +1,8 @@
 /**
  * Docker Compose variable interpolation, as documented at
  * https://docs.docker.com/reference/compose-file/interpolation/ : `$VAR`, `${VAR}`, `${VAR:-d}`,
- * `${VAR-d}`, `${VAR:?e}`, `${VAR?e}`, `${VAR:+r}`, `${VAR+r}`, nested expressions in `d`, `e` and `r`,
- * and `$$` for a literal `$`. An unset variable without a default "displays a warning and substitutes
+ * `${VAR-d}`, `${VAR:?e}`, `${VAR?e}`, `${VAR:+r}`, `${VAR+r}`, nested expressions in `d` and `r`,
+ * and `$$` for a literal `$`. The `e` message is quoted as written, never interpolated. An unset variable without a default "displays a warning and substitutes
  * the variable with an empty string". Other shell forms such as `${VAR/foo/bar}` are not supported.
  */
 
@@ -128,7 +128,8 @@ function formatError(text: string, nameStart: number): string {
  * Evaluates one braced expression.
  * @param name Variable name.
  * @param operator Operator, or undefined for `${NAME}`.
- * @param argument Text after the operator, still to be interpolated when it is used.
+ * @param argument Text after the operator: a default or replacement still to be interpolated, or a
+ * `:?`/`?` message, which is quoted as written.
  * @param state Shared state.
  * @param depth Nesting of the expression.
  * @returns The expression's value.
@@ -159,9 +160,10 @@ function evaluate(name: string, operator: Operator | undefined, argument: string
       if (operator === ':?' ? nonEmpty : set) {
         return value as string;
       }
-      const message = nested();
+      // compose-go interpolates the message, but diagnostics are shown unmasked, so `${A:?${DB_PASSWORD}}`
+      // would print the secret: the author's text is quoted as written instead.
       if (!state.stopped) {
-        state.errors.push(`required variable ${name} is missing a value${message ? `: ${message}` : ''}`);
+        state.errors.push(`required variable ${name} is missing a value${argument ? `: ${argument}` : ''}`);
       }
       return '';
     }
