@@ -131,6 +131,24 @@ describe('interpolate', () => {
   });
 
   /**
+   * Validates brace matching inside a default, which compose-go's `getFirstBraceClosingIndex` does by
+   * counting every `{` and `}` with no special case for `$$`. Expected: `${A:-$${X}}` closes at its last
+   * brace, giving the literal `${X}` when A is unset and A's value when it is set, with no error.
+   */
+  it('closes an expression whose default holds an escaped $${X}', () => {
+    expect(run('${A:-$${X}}')).toEqual({ value: '${X}', references: ['A'], unset: [], errors: [] });
+    expect(run('${A:-$${X}}', { A: 'v' })).toEqual({ value: 'v', references: ['A'], unset: [], errors: [] });
+  });
+
+  /**
+   * Validates an unbalanced `{` inside a default. compose-go finds no balanced brace and falls back to
+   * its pattern's greedy match, which ends at the last `}` of the line. Expected: `${A:-{x}` gives `{x`.
+   */
+  it('falls back to the last brace of the line when braces do not balance', () => {
+    expect(run('${A:-{x}')).toEqual({ value: '{x', references: ['A'], unset: [], errors: [] });
+  });
+
+  /**
    * Validates that a dollar not followed by a name stays literal. Expected: `$1`, a trailing `$` and
    * `$-` are kept as written.
    */
