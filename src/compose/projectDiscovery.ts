@@ -8,6 +8,12 @@ export const COMPOSE_KIND = 'compose';
 /** Folder names under which compose files are not projects (compared case-insensitively). */
 export const IGNORED_FOLDERS: string[] = ['node_modules', '.git'];
 
+/** Workspace glob matching every primary compose file, built from {@link PRIMARY_COMPOSE_FILES}. */
+export const COMPOSE_MARKER_GLOB = `**/{${PRIMARY_COMPOSE_FILES.join(',')}}`;
+
+/** Workspace glob excluding {@link IGNORED_FOLDERS}. */
+export const COMPOSE_EXCLUDE_GLOB = `**/{${IGNORED_FOLDERS.join(',')}}/**`;
+
 /**
  * Ranks a file name among the primary compose files.
  * @param fileName File name without directory.

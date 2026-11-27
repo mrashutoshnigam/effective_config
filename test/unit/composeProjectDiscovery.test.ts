@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
-import { COMPOSE_KIND, findComposeProjects, ownsComposeFileName } from '../../src/compose/projectDiscovery';
+import { COMPOSE_EXCLUDE_GLOB, COMPOSE_KIND, COMPOSE_MARKER_GLOB, findComposeProjects, ownsComposeFileName } from '../../src/compose/projectDiscovery';
 import { discoverProjects, type Ecosystem } from '../../src/ecosystem';
 import { findNodeProjects } from '../../src/node/projectDiscovery';
 import { dropFallbackInClaimedRoots, findPythonProjects } from '../../src/python/projectDiscovery';
@@ -37,6 +37,17 @@ describe('findComposeProjects', () => {
       path.join('/ws', '.git', 'compose.yaml'),
       path.join('/ws', 'x', 'compose.override.yaml'),
     ])).toEqual([]);
+  });
+});
+
+describe('discovery globs', () => {
+  /**
+   * Validates the workspace search the ecosystem runs. Expected: the four primary file names, and the
+   * ignored folders excluded at any depth.
+   */
+  it('match the primary compose files outside ignored folders', () => {
+    expect(COMPOSE_MARKER_GLOB).toBe('**/{compose.yaml,compose.yml,docker-compose.yaml,docker-compose.yml}');
+    expect(COMPOSE_EXCLUDE_GLOB).toBe('**/{node_modules,.git}/**');
   });
 });
 

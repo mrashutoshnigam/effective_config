@@ -3,7 +3,7 @@ import type { Ecosystem } from '../ecosystem';
 import { osEnvironment, settingsSource } from '../hostServices';
 import { nodeFileSystem } from '../sources/fileSystem';
 import { ComposeProvider } from './composeProvider';
-import { COMPOSE_KIND, IGNORED_FOLDERS, findComposeProjects, ownsComposeFileName } from './projectDiscovery';
+import { COMPOSE_EXCLUDE_GLOB, COMPOSE_KIND, COMPOSE_MARKER_GLOB, findComposeProjects, ownsComposeFileName } from './projectDiscovery';
 import { readComposeSettings } from './settings';
 
 /**
@@ -15,7 +15,7 @@ export const COMPOSE_ECOSYSTEM: Ecosystem = {
   tag: '[Compose]',
   /** @inheritdoc */
   async discover() {
-    const markers = await vscode.workspace.findFiles('**/{compose,docker-compose}.{yaml,yml}', `**/{${IGNORED_FOLDERS.join(',')}}/**`);
+    const markers = await vscode.workspace.findFiles(COMPOSE_MARKER_GLOB, COMPOSE_EXCLUDE_GLOB);
     return findComposeProjects(markers.map((u) => u.fsPath));
   },
   /** @inheritdoc */
