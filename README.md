@@ -1,5 +1,8 @@
 # Effective Config Viewer
 
+[![Release (bump, tag & publish)](https://github.com/mrashutoshnigam/effective_config/actions/workflows/release.yml/badge.svg)](https://github.com/mrashutoshnigam/effective_config/actions/workflows/release.yml)
+[![Publish to VS Code Marketplace](https://github.com/mrashutoshnigam/effective_config/actions/workflows/publish.yml/badge.svg)](https://github.com/mrashutoshnigam/effective_config/actions/workflows/publish.yml)
+
 **See the exact configuration your .NET, Python or Node app, or Docker Compose service, will load — every value, and where it came from.**
 
 Config is spread across layers: `appsettings.json`, environment overrides, user secrets, `.env` files, OS variables, launch profiles. Effective Config Viewer merges them the way your framework does and shows you the final result in one panel — with the winning source of every value and the chain of what it overrode.
