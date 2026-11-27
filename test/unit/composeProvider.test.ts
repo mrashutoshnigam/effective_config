@@ -335,6 +335,32 @@ describe('ComposeProvider.buildLayers', () => {
   });
 
   /**
+   * Validates the I/O of one build, which runs on every panel refresh. Expected: each compose file is
+   * read once and the project directory is listed once.
+   */
+  it('reads each compose file once and lists the directory once per build', async () => {
+    const inner = memoryFs(FIXTURE);
+    const reads = new Map<string, number>();
+    const lists = new Map<string, number>();
+    /**
+     * Counts one call.
+     * @param counts Calls by path.
+     * @param p Path of the call.
+     */
+    const count = (counts: Map<string, number>, p: string): void => {
+      counts.set(path.normalize(p), (counts.get(path.normalize(p)) ?? 0) + 1);
+    };
+    const fs: ComposeProviderOptions['fs'] = {
+      readFile: (p) => (count(reads, p), inner.readFile(p)),
+      listDir: (d) => (count(lists, d), inner.listDir(d)),
+    };
+    await new ComposeProvider({ fs, osEnv: {}, files: [], platform: 'linux' }).buildLayers(PROJECT, { profile: 'api', environment: '.env' });
+    expect(reads.get(path.join(DIR, 'compose.yaml'))).toBe(1);
+    expect(reads.get(path.join(DIR, 'compose.override.yaml'))).toBe(1);
+    expect(lists.get(path.normalize(DIR))).toBe(1);
+  });
+
+  /**
    * Validates that a `COMPOSE_FILE` entry that does not exist yet is watched, so creating it rebuilds
    * the panel. Expected: both listed paths are watched, the missing one included.
    */
