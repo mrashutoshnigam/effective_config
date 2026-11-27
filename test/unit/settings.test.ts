@@ -68,6 +68,7 @@ describe('package.json contribution defaults', () => {
     expect(keys).toEqual([
       'effectiveConfig.dotnet.jsonLayers',
       'effectiveConfig.maskPatterns',
+      'effectiveConfig.node.framework',
       'effectiveConfig.python.envFiles',
       'effectiveConfig.python.environmentVariables',
       'effectiveConfig.python.envPrefixes',

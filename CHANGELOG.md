@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Node provider: `package.json` folders with `.env` files are shown as `[Node]` projects, with the `.env` order of the framework found in their dependencies: Vite, Next.js, Create React App, dotenv-flow, or a generic order for unknown frameworks.
+- Node mode detection from `MODE` (Vite) and `NODE_ENV`; Next.js, CRA and dotenv-flow skip `.env.local` under `test`; `VITE_`, `NEXT_PUBLIC_` and `REACT_APP_` OS variables are shown even when no file defines them.
+- New setting `effectiveConfig.node.framework` forces a framework instead of detecting it.
+
 - Internal: shared `DotenvProviderBase` (env file layers, `{env}` patterns, expansion, OS filtering) now backs the Python provider; behaviour is unchanged.
 - Internal: each ecosystem lives in its own folder and is registered with one line in `src/hostEcosystems.ts`.
 - "No project" messages no longer name specific languages.

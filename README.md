@@ -1,6 +1,6 @@
 # Effective Config Viewer
 
-**See the exact configuration your .NET or Python app will load — every value, and where it came from.**
+**See the exact configuration your .NET, Python or Node app will load — every value, and where it came from.**
 
 Config is spread across layers: `appsettings.json`, environment overrides, user secrets, `.env` files, OS variables, launch profiles. Effective Config Viewer merges them the way your framework does and shows you the final result in one panel — with the winning source of every value and the chain of what it overrode.
 
@@ -18,8 +18,8 @@ Nothing is built or run. The merge is reproduced in the extension, so you see th
 
 - **Merged view, one panel.** The final config for a chosen environment, as a tree or a flat `Section:Key = value` list. Search by key or value.
 - **Provenance for every value.** See which layer won and the full override chain. Click a source to jump to the exact line that set it.
-- **.NET and Python, side by side.** .NET projects (`.csproj` + `appsettings.json`) and Python projects (`.env` + a project marker) share one switcher, tagged `[.NET]` / `[Python]`.
-- **Faithful merge order.** .NET: the default `WebApplication.CreateBuilder` order (JSON layers → user secrets → env vars → command-line args). Python: python-dotenv order, OS-wins by default, flip with one setting.
+- **.NET, Python and Node, side by side.** .NET projects (`.csproj` + `appsettings.json`), Python projects (`.env` + a project marker) and Node projects (`package.json` + `.env`) share one switcher, tagged `[.NET]` / `[Python]` / `[Node]`.
+- **Faithful merge order.** .NET: the default `WebApplication.CreateBuilder` order (JSON layers → user secrets → env vars → command-line args). Python: python-dotenv order, OS-wins by default, flip with one setting. Node: the order of the framework found in `package.json` (Vite, Next.js, Create React App, dotenv-flow).
 - **Launch profiles.** Reads `launchSettings.json` (.NET) and `.vscode/launch.json` (Python); the profile preselects the environment.
 - **Secrets stay hidden.** Values from secret layers or matching a mask pattern are masked and never sent to the webview until you reveal them one at a time. Values expanded from a secret stay masked too.
 - **Copy & export.** Copy a value, key path, or env-var name. Export the merged result as nested JSON or flat `KEY=value`.
@@ -53,12 +53,26 @@ Pick the project, launch profile and environment at the top of the panel.
 
 Set `effectiveConfig.python.fileOverridesOs` to move the files above OS variables (python-dotenv `override=True`). `.env` parsing follows python-dotenv rules, including `${VAR}` / `${VAR:-default}` expansion.
 
+### Node (lowest priority first; OS variables always win)
+The framework is detected from the `package.json` dependencies (first match: `next`, `react-scripts`, `vite`, `dotenv-flow`) or forced with `effectiveConfig.node.framework`.
+
+| Framework | Files | Mode from | `.env.local` under `test` | OS variables shown even when no file defines them |
+| --- | --- | --- | --- | --- |
+| Vite | `.env`, `.env.local`, `.env.{mode}`, `.env.{mode}.local` | `MODE`, then `NODE_ENV` | loaded | `VITE_*` |
+| Next.js | `.env`, `.env.{mode}`, `.env.local`, `.env.{mode}.local` | `NODE_ENV` (`development`, `production`, `test`) | skipped | `NEXT_PUBLIC_*` |
+| Create React App | same as Next.js | `NODE_ENV` (`development`, `production`, `test`) | skipped | `REACT_APP_*` |
+| dotenv-flow | same as Vite | `NODE_ENV` | skipped | none |
+| Generic (no known framework) | same as Next.js | `NODE_ENV` | loaded | none |
+
+The mode is read from the OS, then `.env`; `development` when neither names one. Keys stay flat (no `__` nesting).
+
 ## Settings
 
 | Setting | Default | Description |
 | --- | --- | --- |
 | `effectiveConfig.dotnet.jsonLayers` | `["appsettings.json", "appsettings.{env}.json", "appsettings.secrets.json"]` | JSON layers, lowest first. `{env}` = selected environment. A pattern containing `secret` is treated as sensitive. |
 | `effectiveConfig.maskPatterns` | `["*Password*", "*Secret*", "*Key*", "*TOKEN*", "ConnectionStrings:*"]` | Case-insensitive globs of keys whose values are masked by default. |
+| `effectiveConfig.node.framework` | `"auto"` | Node framework whose `.env` order is simulated: `auto` (detect from `package.json`), `vite`, `next`, `cra`, `dotenv-flow` or `generic`. |
 | `effectiveConfig.python.envFiles` | `[".env", ".env.{env}", ".env.local", ".env.{env}.local"]` | Python env files, lowest first. A pattern containing `secret` is treated as sensitive. |
 | `effectiveConfig.python.fileOverridesOs` | `false` | When true, env files override OS variables. |
 | `effectiveConfig.python.envPrefixes` | `[]` | OS variables with these prefixes are shown even when no file defines them. |
@@ -70,6 +84,8 @@ Set `effectiveConfig.python.fileOverridesOs` to move the files above OS variable
 **.NET:** custom providers, Azure Key Vault / App Configuration, `Program.cs` reordering, `Directory.Build.props` `UserSecretsId`, legacy `SQLCONNSTR_` prefixes and switch mappings are not reflected.
 
 **Python:** `.flaskenv`, Django settings modules, `os.environ` reads in code, conda `environment.yml`, direnv, Poetry/pipenv auto-loading and pydantic `secrets_dir` are not reflected. Some rare quote escapes are not decoded.
+
+**Node:** `envDir` / `envPrefix` in `vite.config`, `--mode` flags in npm scripts, `env` in `next.config`, env files outside the package folder (monorepos) and `process.env` assignments in code are not reflected. Expansion follows the python-dotenv rules for every preset: `$VAR` without braces stays literal, and dotenv-flow values are expanded although dotenv-flow itself does not expand them.
 
 ## Adding a language provider
 
