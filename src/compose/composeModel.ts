@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import type { Diagnostic, LayerEntry, SourceLocation } from '../engine/types';
 import { parseYamlLayer } from '../sources/yamlLayer';
+import { resolveFrom } from './composeFiles';
 import { interpolate } from './interpolation';
 
 /** Compose merge tags (https://docs.docker.com/reference/compose-file/merge/#reset-value). */
@@ -292,7 +293,7 @@ class ComposeFileReader {
     if (fragment.envFiles !== undefined) {
       fragment.envFiles = [...pending.envFiles.values()]
         .filter((f): f is PendingEnvFile & { path: string; location: SourceLocation } => !!f.path && f.location !== undefined)
-        .map((f) => ({ path: path.isAbsolute(f.path) ? path.normalize(f.path) : path.join(base, f.path), required: f.required, location: f.location }));
+        .map((f) => ({ path: resolveFrom(base, f.path), required: f.required, location: f.location }));
     }
     if (environmentTag) {
       fragment.environmentTag = environmentTag;

@@ -1,6 +1,6 @@
 import * as path from 'node:path';
-import type { Diagnostic } from '../engine/types';
-import { parseDotenv, type DotenvEntry } from '../sources/dotenv';
+import type { Diagnostic, LayerEntry, SourceLocation } from '../engine/types';
+import { parseDotenv } from '../sources/dotenv';
 import { VarMap } from '../sources/dotenvProviderBase';
 import type { FileSystem } from '../sources/fileSystem';
 import { interpolate, type InterpolationResult } from './interpolation';
@@ -39,33 +39,50 @@ export function listComposeEnvFiles(fileNames: string[]): string[] {
   return [DEFAULT_ENV_FILE, ...others.sort(compareIgnoreCase)];
 }
 
-/** One env file line after interpolation. */
-export interface ExpandedEnvEntry {
-  /** The parsed line. */
-  entry: DotenvEntry;
-  /** Its interpolation; single-quoted values are kept literally, with nothing read. */
-  result: InterpolationResult;
+/**
+ * Builds the layer entry of an interpolated value.
+ * @param key Variable name.
+ * @param result Interpolation of its value.
+ * @param location Where the value is written.
+ * @returns The entry, naming the variables read so a value built from a secret stays masked.
+ */
+export function interpolatedEntry(key: string, result: InterpolationResult, location: SourceLocation | undefined): LayerEntry {
+  return { key, value: result.value, location, ...(result.references.length > 0 ? { references: result.references } : {}) };
+}
+
+/** An env file read the way Compose reads it. */
+export interface ComposeEnvFile {
+  /** One entry per line, interpolated, in source order. */
+  entries: LayerEntry[];
+  /** Parse problems and failed `:?` checks at their lines; messages never quote values. */
+  diagnostics: Diagnostic[];
 }
 
 /**
- * Interpolates the lines of an env file the way Compose v2 does. Unquoted and double-quoted values are
- * interpolated, single-quoted ones are literal (https://docs.docker.com/reference/compose-file/services/#env_file-format).
+ * Reads an env file the way Compose v2 does. Unquoted and double-quoted values are interpolated,
+ * single-quoted ones are literal (https://docs.docker.com/reference/compose-file/services/#env_file-format).
  * A reference is looked up in `scope` first and then in `parsed`, the values parsed so far: compose-go's
  * `dotenv.expandVariables` calls the lookup function before reading the vars map its parser writes
  * every line into, and a service passes one map through all of its env_files.
- * @param entries Parsed lines in source order.
+ * @param text File contents.
+ * @param filePath Absolute path of the file.
  * @param scope Variables that win over the parsed lines.
  * @param parsed Values of earlier lines; each line's value is written into it, latest wins.
- * @returns Each line with its interpolation, in source order.
+ * @returns The entries and diagnostics. Unset references give no diagnostics.
  */
-export function expandEnvFileEntries(entries: DotenvEntry[], scope: (name: string) => string | undefined, parsed: VarMap = new VarMap()): ExpandedEnvEntry[] {
-  return entries.map((entry) => {
+export function readComposeEnvFile(text: string, filePath: string, scope: (name: string) => string | undefined, parsed: VarMap = new VarMap()): ComposeEnvFile {
+  const dotenv = parseDotenv(text, filePath);
+  // The parser's info on a bare `KEY` line names python-dotenv rules, which do not apply to Compose.
+  const diagnostics = dotenv.diagnostics.filter((d) => d.severity !== 'info');
+  const entries = dotenv.entries.map((entry) => {
     const result = entry.expand
       ? interpolate(entry.value, (name) => scope(name) ?? parsed.get(name))
       : { value: entry.value, references: [], unset: [], errors: [] };
     parsed.set(entry.name, result.value);
-    return { entry, result };
+    diagnostics.push(...result.errors.map((message): Diagnostic => ({ severity: 'error', message, location: entry.location })));
+    return interpolatedEntry(entry.name, result, entry.location);
   });
+  return { entries, diagnostics };
 }
 
 /** Interpolation scope of a project: the env file below the OS environment. */
@@ -101,14 +118,8 @@ export async function readComposeScope(fs: FileSystem, projectDir: string, envFi
       diagnostics.push({ severity: 'warning', message: `env file not found: ${envFile}` });
     }
   } else {
-    const parsed = parseDotenv(text, envFilePath);
-    // A bare `KEY` line inherits the shell value in Compose, which the OS layer of the scope already gives,
-    // so the parser's python-dotenv note about it does not apply.
-    diagnostics.push(...parsed.diagnostics.filter((d) => d.severity !== 'info'));
-    for (const { entry, result } of expandEnvFileEntries(parsed.entries, (name) => os.get(name))) {
-      vars.set(entry.name, result.value);
-      diagnostics.push(...result.errors.map((message): Diagnostic => ({ severity: 'error', message, location: entry.location })));
-    }
+    // A bare `KEY` line inherits the shell value in Compose, which the OS layer of the scope already gives.
+    diagnostics.push(...readComposeEnvFile(text, envFilePath, (name) => os.get(name), vars).diagnostics);
   }
   vars.merge(os);
   return { vars, envFilePath, envFileFound: text !== undefined, diagnostics };

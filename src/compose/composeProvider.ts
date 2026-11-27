@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import type { Diagnostic, Layer, LayerEntry } from '../engine/types';
 import type { ConfigProvider, LayerBuild, ProjectDescription, ProjectInfo, Selection } from '../provider';
-import { parseDotenv } from '../sources/dotenv';
+
 import { VarMap } from '../sources/dotenvProviderBase';
 import type { FileSystem } from '../sources/fileSystem';
 import {
@@ -10,9 +10,10 @@ import {
   PRIMARY_COMPOSE_FILES,
   activeProfiles,
   envFileDir,
-  expandEnvFileEntries,
+  interpolatedEntry,
   listComposeEnvFiles,
   outsideWorkspaceNotes,
+  readComposeEnvFile,
   readComposeScope,
   recordingFileSystem,
   resolveComposeFiles,
@@ -242,14 +243,8 @@ export class ComposeProvider implements ConfigProvider {
       diagnostics.push({ severity: ref.required ? 'error' : 'info', message: `env file not found: ${label}`, location: ref.location });
       return undefined;
     }
-    const dotenv = parseDotenv(text, ref.path);
-    // The parser's note on a bare `KEY` line names python-dotenv rules, which do not apply here.
-    diagnostics.push(...dotenv.diagnostics.filter((d) => d.severity !== 'info'));
-    const entries: LayerEntry[] = [];
-    for (const { entry, result } of expandEnvFileEntries(dotenv.entries, scope, parsed)) {
-      diagnostics.push(...result.errors.map((message): Diagnostic => ({ severity: 'error', message, location: entry.location })));
-      entries.push({ key: entry.name, value: result.value, location: entry.location, ...(result.references.length > 0 ? { references: result.references } : {}) });
-    }
+    const { entries, diagnostics: problems } = readComposeEnvFile(text, ref.path, scope, parsed);
+    diagnostics.push(...problems);
     return { id: `composeEnvFile:${index}`, label, kind: 'composeEnvFile', sensitive: false, filePath: ref.path, entries };
   }
 
@@ -276,8 +271,7 @@ export class ComposeProvider implements ConfigProvider {
         }
         continue;
       }
-      const result = interpolate(item.raw, (n) => scope.get(n));
-      entries.push({ key: item.name, value: result.value, location: item.location, ...(result.references.length > 0 ? { references: result.references } : {}) });
+      entries.push(interpolatedEntry(item.name, interpolate(item.raw, (n) => scope.get(n)), item.location));
     }
     return entries;
   }
