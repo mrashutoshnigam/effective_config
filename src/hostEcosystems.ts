@@ -1,11 +1,12 @@
 import type * as vscode from 'vscode';
+import { COMPOSE_ECOSYSTEM } from './compose/ecosystem';
 import { DOTNET_ECOSYSTEM } from './dotnet/ecosystem';
 import type { Ecosystem } from './ecosystem';
 import { NODE_ECOSYSTEM } from './node/ecosystem';
 import { PYTHON_ECOSYSTEM } from './python/ecosystem';
 
 /** The registry behind {@link ECOSYSTEMS}. */
-const registry: Ecosystem[] = [DOTNET_ECOSYSTEM, NODE_ECOSYSTEM, PYTHON_ECOSYSTEM];
+const registry: Ecosystem[] = [DOTNET_ECOSYSTEM, NODE_ECOSYSTEM, COMPOSE_ECOSYSTEM, PYTHON_ECOSYSTEM];
 
 /**
  * The ecosystems this extension supports, in discovery order. The first entry is also the default

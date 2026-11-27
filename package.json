@@ -1,7 +1,7 @@
 {
   "name": "effective-config",
   "displayName": "Effective Config Viewer",
-  "description": "Shows the merged .NET appsettings, Python .env or Node .env configuration for a chosen environment, with the source of every value.",
+  "description": "Shows the merged .NET appsettings, Python .env, Node .env or Docker Compose service configuration for a chosen environment, with the source of every value.",
   "version": "0.2.5",
   "publisher": "mrashutoshnigam",
   "icon": "media/icon.png",
@@ -31,6 +31,8 @@
     "node",
     "vite",
     "nextjs",
+    "docker",
+    "docker compose",
     ".env",
     "config",
     "env",
@@ -58,13 +60,13 @@
       "explorer/context": [
         {
           "command": "effectiveConfig.show",
-          "when": "resourceFilename =~ /^appsettings.*\\.json$/i || resourceExtname == .csproj || resourceFilename =~ /^\\.env(\\..*)?$/i"
+          "when": "resourceFilename =~ /^appsettings.*\\.json$/i || resourceExtname == .csproj || resourceFilename =~ /^\\.env(\\..*)?$/i || resourceFilename =~ /^(docker-)?compose(\\.override)?\\.ya?ml$/i"
         }
       ],
       "editor/title": [
         {
           "command": "effectiveConfig.show",
-          "when": "resourceFilename =~ /^appsettings.*\\.json$/i || resourceFilename =~ /^\\.env(\\..*)?$/i",
+          "when": "resourceFilename =~ /^appsettings.*\\.json$/i || resourceFilename =~ /^\\.env(\\..*)?$/i || resourceFilename =~ /^(docker-)?compose(\\.override)?\\.ya?ml$/i",
           "group": "navigation"
         }
       ],
@@ -77,6 +79,15 @@
     "configuration": {
       "title": "Effective Config Viewer",
       "properties": {
+        "effectiveConfig.compose.files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "resource",
+          "description": "Compose files to load, lowest priority first, like docker compose -f; relative to the project folder. Empty uses COMPOSE_FILE or the default compose.yaml and override file."
+        },
         "effectiveConfig.dotnet.jsonLayers": {
           "type": "array",
           "items": {

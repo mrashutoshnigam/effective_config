@@ -1,0 +1,28 @@
+import * as vscode from 'vscode';
+import type { Ecosystem } from '../ecosystem';
+import { osEnvironment, settingsSource } from '../hostServices';
+import { nodeFileSystem } from '../sources/fileSystem';
+import { ComposeProvider } from './composeProvider';
+import { COMPOSE_KIND, IGNORED_FOLDERS, findComposeProjects, ownsComposeFileName } from './projectDiscovery';
+import { readComposeSettings } from './settings';
+
+/**
+ * The Docker Compose ecosystem: the environment one service's container receives. Registered before
+ * Python, so a workspace root holding `compose.yaml` and `.env` gets no Python fallback project.
+ */
+export const COMPOSE_ECOSYSTEM: Ecosystem = {
+  kind: COMPOSE_KIND,
+  tag: '[Compose]',
+  /** @inheritdoc */
+  async discover() {
+    const markers = await vscode.workspace.findFiles('**/{compose,docker-compose}.{yaml,yml}', `**/{${IGNORED_FOLDERS.join(',')}}/**`);
+    return findComposeProjects(markers.map((u) => u.fsPath));
+  },
+  /** @inheritdoc */
+  createProvider(project) {
+    const { files } = readComposeSettings(settingsSource(vscode.Uri.file(project.dir)));
+    return new ComposeProvider({ fs: nodeFileSystem, osEnv: osEnvironment(), files });
+  },
+  /** @inheritdoc */
+  ownsFileName: ownsComposeFileName,
+};
