@@ -3,9 +3,10 @@
 ## Unreleased
 
 - Docker Compose provider: folders with `compose.yaml` / `docker-compose.yml` are shown as `[Compose]` projects. The panel shows the environment of the chosen service: `env_file` entries, then `environment` per compose file (base, then override), with the winner and override chain of every variable.
-- Compose interpolation (`${VAR:-d}`, `${VAR:?e}`, `${VAR:+r}` and their unset-only forms, nested defaults, `$$`), with the OS over the selected env file. Missing `:?` variables are error diagnostics at their line; unset variables are warnings.
+- Compose interpolation (`${VAR:-d}`, `${VAR:?e}`, `${VAR:+r}` and their unset-only forms, nested defaults, `$$`), with the OS over the selected env file. Missing `:?` variables are error diagnostics at their line, quoting the author's message as written so no secret is expanded into it; unset variables are warnings. `env_file` values also see the service's `environment` and earlier `env_file` lines, as in compose-go.
 - The environment picker of a Compose project simulates `--env-file`. `COMPOSE_FILE`, `COMPOSE_PATH_SEPARATOR`, `COMPOSE_PROFILES`, `COMPOSE_ENV_FILES` and the `!reset` / `!override` merge tags are honoured.
-- New setting `effectiveConfig.compose.files` lists the compose files to load, like `docker compose -f`.
+- New setting `effectiveConfig.compose.files` lists the compose files to load, like `docker compose -f`. The env file and the env-file dropdown then come from the first listed file's folder.
+- Compose files, `COMPOSE_FILE` entries and `env_file` paths outside the workspace are read with an info naming each one; missing `COMPOSE_FILE` entries are watched.
 - Compose files get the Explorer and editor-title triggers.
 - Internal: `parseYamlLayer` accepts `knownTags` and reports tagged nodes and null scalars.
 

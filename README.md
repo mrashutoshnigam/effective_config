@@ -72,14 +72,15 @@ The panel shows the environment the selected service's container would receive, 
 1. Each `env_file` of the service, in order. The string, list and `{ path, required }` forms are read, with paths relative to the compose file that declares them. Lists from override files are appended to the base file's list.
 2. The service's `environment` in each compose file, base file first, then the override file. Map and list (`NAME=value`) forms are read. An override that sets one variable keeps the base file's others, and shows the base value in the override chain.
 
-Values are interpolated the way Compose does it. The OS environment wins over the selected env file, and an env file line may use the OS or its own earlier lines.
+Values are interpolated the way Compose does it. The OS environment wins over the selected env file, and an env file line may use the OS or its own earlier lines. An `env_file` value looks a variable up in the OS and the selected env file, then in the service's `environment`, then in the service's earlier `env_file` lines.
 
 - **Interpolation forms:** `$VAR`, `${VAR}`, `${VAR:-default}`, `${VAR-default}`, `${VAR:?error}`, `${VAR?error}`, `${VAR:+replacement}`, `${VAR+replacement}`, nested expressions in defaults, and `$$` for a literal `$`. Values in `env_file` files are interpolated too, except single-quoted ones.
-- **Missing values:** an unset variable without a default becomes an empty string, with a warning. A missing `:?` / `?` variable anywhere in a loaded compose file is an error diagnostic at its line, even in another service. It shows the author's message, and the key stays visible with an empty value.
+- **Missing values:** an unset variable without a default becomes an empty string, with a warning. A missing `:?` / `?` variable anywhere in a loaded compose file is an error diagnostic at its line, even in another service. It shows the author's message as written, without interpolating it so a secret cannot leak into it, and the key stays visible with an empty value.
 - **Value-less variables:** `FOO:` and `- FOO` take the value from the OS or the env file. When neither sets it, the variable is left out and an info says so.
 - **Merge tags:** `!reset` and `!override` on a service's `environment` or `env_file` drop what lower files set. `FOO: !reset null` removes one variable.
-- **Env file dropdown:** simulates `docker compose --env-file`. It lists `.env`, then the other `.env.*` and `*.env` files in the project folder. `.env` is preselected, unless `COMPOSE_ENV_FILES` in the OS names another listed file first.
+- **Env file dropdown:** simulates `docker compose --env-file`. It lists `.env`, then the other `.env.*` and `*.env` files in the project folder, or in the folder of the first `effectiveConfig.compose.files` entry when that is set. `COMPOSE_FILE` does not move it, as Compose reads the env file before applying `COMPOSE_FILE`. `.env` is preselected, unless `COMPOSE_ENV_FILES` in the OS names another listed file first (as a name, a relative or an absolute path).
 - **Compose files:** `effectiveConfig.compose.files` when set (like `-f`), else `COMPOSE_FILE` from the OS or the env file (split on `COMPOSE_PATH_SEPARATOR`; `;` on Windows, `:` elsewhere), else the first of `compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml` with its override file (`compose.override.*` or `docker-compose.override.*`).
+- **Files outside the workspace:** compose files, `COMPOSE_FILE` entries and `env_file` paths outside every workspace folder are still read, as Compose reads them, with an info naming each one.
 - **Profiles:** a service gated by `profiles` stays in the picker. When none of its profiles is in `COMPOSE_PROFILES`, an info names the profiles it needs.
 
 Variable names are matched case-insensitively, as for Python and Node, so `PATH` and `Path` merge as one key.
@@ -114,7 +115,7 @@ Variable names are matched case-insensitively, as for Python and Node, so `PATH`
 2. Export an `Ecosystem` from that folder (`src/<language>/ecosystem.ts`): its kind, picker tag, discovery and provider factory.
 3. Add it to `ECOSYSTEMS` in `src/hostEcosystems.ts`, before Python: Python's fallback project gives way to projects the earlier ecosystems found.
 
-Everything else stays in the folder: layers may use their own `kind`, and settings are read with `settingsSource()` from `src/hostServices.ts`. The one exception is the VS Code manifest: new settings and Explorer or editor-title triggers for other file names must be declared in `package.json`.
+Everything else stays in the folder: layers may use their own `kind`, and settings are read with `settingsSource()` from `src/hostServices.ts`. Shared modules such as `src/sources/` and `src/hostServices.ts` may gain backward-compatible, language-neutral options when a language needs them; existing callers must keep working unchanged. The one exception is the VS Code manifest: new settings and Explorer or editor-title triggers for other file names must be declared in `package.json`.
 
 ## License
 
