@@ -20,7 +20,7 @@ import {
   resolveFrom,
   type ComposeScope,
 } from './composeFiles';
-import { mergeService, readComposeFile, serviceNames, type ComposeFileModel, type EnvFileRef, type EnvironmentItem } from './composeModel';
+import { mergeService, readComposeFile, serviceNames, type ComposeFileModel, type EnvFileRef, type EnvironmentItem, type MergedService } from './composeModel';
 import { interpolate } from './interpolation';
 
 /** Construction options of {@link ComposeProvider}. */
@@ -184,13 +184,20 @@ export class ComposeProvider implements ConfigProvider {
     }
 
     const environmentDiagnostics: Diagnostic[] = [];
+    const removed = this.removedVariables(service.environmentLayers, loaded.scope.vars);
+    /**
+     * Tells whether an entry survives the merged `environment`.
+     * @param entry A layer entry.
+     * @returns False when the topmost `environment` leaves the variable unresolved.
+     */
+    const kept = (entry: LayerEntry): boolean => !removed.has(entry.key.toLowerCase());
     const environmentLayers = service.environmentLayers.map(({ filePath, items }, index): Layer => ({
       id: `composeEnvironment:${index}`,
       label: `environment (${path.basename(filePath)})`,
       kind: 'composeEnvironment',
       sensitive: false,
       filePath,
-      entries: this.environmentEntries(items, loaded.scope.vars, environmentDiagnostics),
+      entries: this.environmentEntries(items, loaded.scope.vars, environmentDiagnostics).filter(kept),
     }));
     // compose-go's `resolveEnvironment` (types/project.go) interpolates env_file values with the project
     // environment first, then the service's resolved `environment`, and its parser falls back to one vars
@@ -212,7 +219,7 @@ export class ComposeProvider implements ConfigProvider {
       watchPaths.add(ref.path);
       const layer = await this.envFileLayer(fs, ref, index, loaded, envFileScope, parsed, diagnostics);
       if (layer) {
-        layers.push(layer);
+        layers.push({ ...layer, entries: layer.entries.filter(kept) });
       }
     }
     layers.push(...environmentLayers);
@@ -249,6 +256,32 @@ export class ComposeProvider implements ConfigProvider {
     const { entries, diagnostics: problems } = readComposeEnvFile(text, ref.path, scope, parsed);
     diagnostics.push(...problems);
     return { id: `composeEnvFile:${index}`, label, kind: 'composeEnvFile', sensitive: false, filePath: ref.path, entries };
+  }
+
+  /**
+   * Finds the variables the merged `environment` removes from the container. Compose merges `environment`
+   * by name across files, so the topmost file's item decides; when it is value-less and the scope does not
+   * define it, the variable "is unset and is removed from the service container environment", and
+   * `environment` "has precedence over env_file ... even when the variable is empty or undefined"
+   * (https://docs.docker.com/reference/compose-file/services/#environment, #env_file).
+   * @param layers The service's `environment` per compose file, base first.
+   * @param scope The interpolation scope.
+   * @returns Lower-cased names to drop from every lower `environment` and `env_file` layer.
+   */
+  private removedVariables(layers: MergedService['environmentLayers'], scope: VarMap): Set<string> {
+    const topmost = new Map<string, EnvironmentItem>();
+    for (const { items } of layers) {
+      for (const item of items) {
+        topmost.set(item.name.toLowerCase(), item);
+      }
+    }
+    const removed = new Set<string>();
+    for (const [name, item] of topmost) {
+      if (item.raw === null && scope.get(item.name) === undefined) {
+        removed.add(name);
+      }
+    }
+    return removed;
   }
 
   /**
