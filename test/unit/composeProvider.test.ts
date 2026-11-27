@@ -342,6 +342,22 @@ describe('ComposeProvider.buildLayers', () => {
   });
 
   /**
+   * Validates a bare `KEY` line in an env_file. compose-go's dotenv parser calls the lookup function for
+   * it, which `resolveEnvironment` builds from the project environment and then the service's
+   * `environment`, and stores nothing when the lookup fails. Expected: SHELL_KEY gets the OS value,
+   * SVC_KEY the service value, NOPE no entry, and no python-dotenv note.
+   */
+  it('fills a bare KEY env_file line from the scope, then the service environment', async () => {
+    const files = {
+      '/p/compose.yaml': 'services:\n  api:\n    env_file: app.env\n    environment:\n      SVC_KEY: svc\n',
+      '/p/app.env': 'SHELL_KEY\nSVC_KEY\nNOPE\n',
+    };
+    const { build: b } = await build(make(files, { osEnv: { SHELL_KEY: 'sh' } }), { profile: 'api', environment: '.env' });
+    expect(b.layers[0].entries.map((e) => [e.key, e.value])).toEqual([['SHELL_KEY', 'sh'], ['SVC_KEY', 'svc']]);
+    expect(b.diagnostics.map((d) => d.message).filter((m) => m.includes('python-dotenv'))).toEqual([]);
+  });
+
+  /**
    * Validates rebuild triggers. Expected: the compose files, the dropdown's env files and every
    * `env_file` path are watched.
    */
