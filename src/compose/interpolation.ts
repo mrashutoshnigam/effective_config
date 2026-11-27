@@ -139,7 +139,10 @@ function evaluate(name: string, operator: Operator | undefined, argument: string
   const value = state.lookup(name);
   const set = value !== undefined;
   const nonEmpty = set && value !== '';
-  /** Interpolates the argument one level deeper. */
+  /**
+   * Interpolates the argument one level deeper.
+   * @returns The expanded argument.
+   */
   const nested = (): string => expand(argument, state, depth + 1);
   switch (operator) {
     case undefined:

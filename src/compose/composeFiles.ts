@@ -259,7 +259,12 @@ export function recordingFileSystem(fs: FileSystem, read: Set<string>): FileSyst
       }
       return text;
     },
-    listDir: (dir) => fs.listDir(dir),
+    /**
+     * Lists a directory without recording it.
+     * @param dir Absolute directory path.
+     * @returns Entry names; empty when the directory does not exist.
+     */
+    listDir: (dir: string): Promise<string[]> => fs.listDir(dir),
   };
 }
 
