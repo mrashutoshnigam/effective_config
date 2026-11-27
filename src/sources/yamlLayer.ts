@@ -1,5 +1,5 @@
 import { LineCounter, isAlias, isMap, isScalar, isSeq, parseAllDocuments, visit } from 'yaml';
-import type { Alias, Document, Node, Pair, Scalar, YAMLError, YAMLMap } from 'yaml';
+import type { Alias, CollectionTag, Document, Node, Pair, Scalar, ScalarTag, YAMLError, YAMLMap, YAMLSeq } from 'yaml';
 import type { Diagnostic, LayerEntry, SourceLocation } from '../engine/types';
 import { stripBom } from './jsonLayer';
 
@@ -31,6 +31,26 @@ export interface YamlLayerParseResult {
   documents: LayerEntry[][];
   /** Problems found while parsing. */
   diagnostics: Diagnostic[];
+  /** Nodes carrying one of {@link YamlLayerOptions.knownTags}, in the order they were flattened; empty by default. */
+  tags: YamlTagRecord[];
+  /** Flattened keys whose scalar was null (`FOO:`, `~`, `null`), unlike `""`; empty by default. */
+  nullKeys: string[];
+}
+
+/** Options of {@link parseYamlLayer}. */
+export interface YamlLayerOptions {
+  /** Tags (e.g. `!reset`) accepted on any node and reported in `tags`. Other tags still warn. */
+  knownTags?: readonly string[];
+}
+
+/** A node carrying a known tag. */
+export interface YamlTagRecord {
+  /** Flattened key the tagged node was flattened to. */
+  key: string;
+  /** The tag as written, e.g. `!reset`. */
+  tag: string;
+  /** Where the tag token is written; for a node reached through an alias, at the anchored node. */
+  location: SourceLocation;
 }
 
 /** A problem that makes the whole file unusable, raised while flattening. */
@@ -79,6 +99,25 @@ interface MergeSource {
   map: YAMLMap;
   /** Flattened key the mapping was defined at; undefined for an inline mapping with no anchor. */
   path: string | undefined;
+}
+
+/**
+ * Builds parser tag definitions that accept a tag on a mapping, a sequence or a scalar and leave the
+ * node as it is, so the tag is kept on the node instead of raising `TAG_RESOLVE_FAILED`.
+ * @param tag Tag as written, e.g. `!reset`.
+ * @returns One definition per node kind.
+ */
+function identityTags(tag: string): (CollectionTag | ScalarTag)[] {
+  /**
+   * Returns a collection unchanged.
+   * @param node The parsed collection.
+   * @returns The same collection.
+   */
+  const keep = (node: YAMLMap.Parsed | YAMLSeq.Parsed): YAMLMap.Parsed | YAMLSeq.Parsed => node;
+  const map: CollectionTag = { tag, collection: 'map', default: false, resolve: keep };
+  const seq: CollectionTag = { tag, collection: 'seq', default: false, resolve: keep };
+  const scalar: ScalarTag = { tag, default: false, resolve: (source: string) => source };
+  return [map, seq, scalar];
 }
 
 /**
@@ -182,19 +221,43 @@ class DocumentFlattener {
   private readonly entries: LayerEntry[] = [];
   /** Flattened key of each anchored node, where it is written. Filled before flattening starts. */
   private readonly anchorPaths = new Map<Node, string>();
+  /** Nodes carrying a known tag, in flattening order. */
+  readonly tags: YamlTagRecord[] = [];
+  /** Flattened keys whose value was a null scalar, in flattening order. */
+  readonly nullKeys: string[] = [];
 
   /**
    * Creates the flattener.
    * @param doc Document to flatten.
    * @param budget What the file may still expand to.
    * @param loc Converts a character offset to a source location.
+   * @param text The file text the offsets refer to, used to locate tag tokens.
+   * @param knownTags Tags to report in {@link tags}.
    */
   constructor(
     private readonly doc: Document,
     private readonly budget: ExpansionBudget,
     private readonly loc: (offset: number) => SourceLocation,
+    private readonly text: string,
+    private readonly knownTags: ReadonlySet<string>,
   ) {
     this.targets = resolveAliases(doc);
+  }
+
+  /**
+   * Records a node's tag when it is a known one. The parser keeps no position for the tag token, so it
+   * is the nearest occurrence of the tag before the node, where YAML requires node properties to be.
+   * @param node Node being flattened (already dereferenced).
+   * @param path Flattened key of the node.
+   */
+  private recordTag(node: Node, path: string): void {
+    const tag = node.tag;
+    if (tag === undefined || !this.knownTags.has(tag)) {
+      return;
+    }
+    const start = startOf(node);
+    const at = this.text.lastIndexOf(tag, start);
+    this.tags.push({ key: path, tag, location: this.loc(at < 0 ? start : at) });
   }
 
   /**
@@ -412,6 +475,7 @@ class DocumentFlattener {
     this.charge(node, depth);
     const target = this.deref(node);
     const origin = isAlias(node) ? this.anchorPaths.get(target) ?? inherited : inherited;
+    this.recordTag(target, path);
     if (isMap(target)) {
       this.active.add(target);
       const pairs = this.pairsOf(target, path, depth);
@@ -422,6 +486,7 @@ class DocumentFlattener {
         const childPath = joinKey(path, pair.segment);
         const childOrigin = pair.origin ?? originBelow(origin, pair.segment);
         if (pair.value === null) {
+          this.nullKeys.push(childPath);
           this.add(childPath, '', pair.key, childOrigin);
         } else {
           this.flatten(pair.value, childPath, depth + 1, childOrigin);
@@ -440,6 +505,9 @@ class DocumentFlattener {
       }
       this.active.delete(target);
     } else if (isScalar(target)) {
+      if (target.value === null) {
+        this.nullKeys.push(path);
+      }
       this.add(path, scalarValue(target), target, origin);
     }
   }
@@ -459,14 +527,22 @@ class DocumentFlattener {
  * and an unquoted secret on a broken line must not reach the diagnostics banner.
  * @param text File contents.
  * @param filePath Path recorded in each entry's location.
+ * @param options Tags to accept and report instead of warning about them.
  * @returns Entries and diagnostics. A problem in any document yields no entries and one error; a file
  * with no content yields no entries and an `info` diagnostic.
  */
-export function parseYamlLayer(text: string, filePath: string): YamlLayerParseResult {
+export function parseYamlLayer(text: string, filePath: string, options: YamlLayerOptions = {}): YamlLayerParseResult {
   text = stripBom(text);
+  const knownTags = new Set(options.knownTags ?? []);
   const lineCounter = new LineCounter();
   // uniqueKeys is off because the parser's check is quadratic on large mappings; pairsOf checks instead.
-  const parsed = parseAllDocuments(text, { lineCounter, prettyErrors: false, merge: true, uniqueKeys: false });
+  const parsed = parseAllDocuments(text, {
+    lineCounter,
+    prettyErrors: false,
+    merge: true,
+    uniqueKeys: false,
+    customTags: [...knownTags].flatMap(identityTags),
+  });
   const docs: Document[] = [...parsed];
 
   /**
@@ -488,6 +564,8 @@ export function parseYamlLayer(text: string, filePath: string): YamlLayerParseRe
     entries: [],
     documents: [],
     diagnostics: [{ severity: 'error', message, location: loc(offset) }],
+    tags: [],
+    nullKeys: [],
   });
   /**
    * Reports parser warnings as one diagnostic, because the banner has one row per diagnostic.
@@ -508,13 +586,26 @@ export function parseYamlLayer(text: string, filePath: string): YamlLayerParseRe
     return fileError(`YAML parse error: ${first.code}`, first.pos[0]);
   }
   if (docs.every(isEmptyDocument)) {
-    return { entries: [], documents: docs.map(() => []), diagnostics: [{ severity: 'info', message: 'empty file', location: loc(0) }] };
+    return {
+      entries: [],
+      documents: docs.map(() => []),
+      diagnostics: [{ severity: 'info', message: 'empty file', location: loc(0) }],
+      tags: [],
+      nullKeys: [],
+    };
   }
 
   try {
     const budget: ExpansionBudget = { nodes: MAX_EXPANDED_NODES, keyChars: MAX_KEY_CHARS };
-    const documents = docs.map((doc) => new DocumentFlattener(doc, budget, loc).run());
-    return { entries: documents.flat(), documents, diagnostics: summarizeWarnings(problems.warnings) };
+    const flatteners = docs.map((doc) => new DocumentFlattener(doc, budget, loc, text, knownTags));
+    const documents = flatteners.map((f) => f.run());
+    return {
+      entries: documents.flat(),
+      documents,
+      diagnostics: summarizeWarnings(problems.warnings),
+      tags: flatteners.flatMap((f) => f.tags),
+      nullKeys: flatteners.flatMap((f) => f.nullKeys),
+    };
   } catch (error) {
     if (error instanceof YamlLayerError) {
       return fileError(error.message, error.offset);
