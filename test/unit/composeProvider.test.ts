@@ -85,6 +85,43 @@ describe('ComposeProvider.describe', () => {
   });
 });
 
+describe('ComposeProvider project directory', () => {
+  /** A compose project in another folder, with its own env files. */
+  const OTHER: Record<string, string> = {
+    '/other/compose.yaml': 'services:\n  web:\n    environment:\n      TAG: ${IMAGE_TAG}\n',
+    '/other/.env': 'IMAGE_TAG=9\n',
+    '/other/.env.stage': 'IMAGE_TAG=stage\n',
+  };
+
+  /**
+   * Validates `effectiveConfig.compose.files` naming a file in another folder, which acts like `-f`:
+   * Compose's project directory is then that file's folder. Expected: the dropdown lists that folder's
+   * env files, `.env` is read from there, and its env files are watched.
+   */
+  it('reads env files from the folder of the first compose.files entry', async () => {
+    const provider = make(OTHER, { files: ['../other/compose.yaml'] });
+    const d = await provider.describe(PROJECT);
+    expect(d.environments).toEqual(['.env', '.env.stage']);
+    expect(d.profiles).toEqual(['web']);
+    const { build: b, byKey } = await build(provider, { profile: 'web', environment: '.env.stage' });
+    expect(byKey.get('TAG')?.value).toBe('stage');
+    expect(b.watchPaths).toContain(path.join('/other', '.env'));
+    expect(b.watchPaths).toContain(path.join('/other', '.env.stage'));
+  });
+
+  /**
+   * Validates `COMPOSE_FILE` read from the env file, which cannot move the env file it came from:
+   * compose-go locates the default `.env` before applying `COMPOSE_FILE`. Expected: the dropdown and the
+   * scope stay in the primary file's folder while the services come from the other folder.
+   */
+  it('keeps the env file in the primary folder when COMPOSE_FILE points elsewhere', async () => {
+    const provider = make({ ...OTHER, '/p/.env': 'IMAGE_TAG=p\nCOMPOSE_FILE=../other/compose.yaml\n' });
+    expect((await provider.describe(PROJECT)).environments).toEqual(['.env', '.env.prod', 'app.env']);
+    const { byKey } = await build(provider, { profile: 'web', environment: '.env' });
+    expect(byKey.get('TAG')?.value).toBe('p');
+  });
+});
+
 describe('ComposeProvider.buildLayers', () => {
   /**
    * Validates the container precedence: env files below `environment`, base file below override.
