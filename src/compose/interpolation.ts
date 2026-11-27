@@ -74,26 +74,32 @@ function nameEnd(text: string, from: number): number {
 }
 
 /**
- * Finds the `}` closing a `${`, counting nested `${` and skipping `$$`, so defaults may hold expressions.
+ * Finds the `}` closing a `${`, as compose-go's `template.getFirstBraceClosingIndex` does: every `{`
+ * and `}` counts, `$` and `$$` are not special, so `${A:-$${X}}` closes at its last brace. When the
+ * braces do not balance, compose-go keeps its pattern's greedy match, which ends at the last `}` before
+ * the next line break; that is the fallback here. compose-go also skips the byte after each `{`, which
+ * only matters for a `{` directly followed by a brace and gives the same text once the rest of the
+ * match is appended, so it is not copied.
  * @param text Text to scan.
  * @param from Offset just past the opening `${`.
- * @returns Offset of the closing brace, or -1 when it is missing.
+ * @returns Offset of the closing brace, or -1 when there is no `}` left on the line.
  */
 function closingBrace(text: string, from: number): number {
   let depth = 1;
-  let i = from;
-  while (i < text.length) {
+  let lineEnd = text.length;
+  for (let i = from; i < text.length; i++) {
     const c = text[i];
-    if (c === '$' && (text[i + 1] === '$' || text[i + 1] === '{')) {
-      depth += text[i + 1] === '{' ? 1 : 0;
-      i += 2;
+    if (c === '{') {
+      depth++;
     } else if (c === '}' && --depth === 0) {
       return i;
-    } else {
-      i++;
+    } else if (c === '\n') {
+      lineEnd = i;
+      break;
     }
   }
-  return -1;
+  const last = text.lastIndexOf('}', lineEnd - 1);
+  return last >= from ? last : -1;
 }
 
 /**
