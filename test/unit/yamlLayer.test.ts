@@ -585,6 +585,66 @@ describe('parseYamlLayer', () => {
     });
   });
 
+  describe('tags and null scalars', () => {
+    /**
+     * Validates that a tag the caller knows, such as Compose's `!reset`, is reported instead of warned
+     * about. Expected: one tag record under the flattened key of the tagged node, located at the tag
+     * token, and no diagnostics.
+     */
+    it('reports known tags with their flattened key', () => {
+      const r = parseYamlLayer('services:\n  web:\n    environment: !reset {}\n', 'f.yaml', { knownTags: ['!reset', '!override'] });
+      expect(r.tags).toEqual([{ key: 'services:web:environment', tag: '!reset', location: { filePath: 'f.yaml', line: 2, column: 17 } }]);
+      expect(r.diagnostics).toEqual([]);
+    });
+
+    /**
+     * Validates that the option is opt-in: without it, the same tag is still unknown. Expected: a
+     * `YAML warning:` diagnostic, as before the option existed.
+     */
+    it('unknown tags still warn', () => {
+      const r = parseYamlLayer('services:\n  web:\n    environment: !reset {}\n', 'f.yaml');
+      expect(r.diagnostics).toHaveLength(1);
+      expect(r.diagnostics[0].message).toMatch(/^YAML warning:/);
+      expect(r.tags).toEqual([]);
+    });
+
+    /**
+     * Validates that a known tag on a block sequence keeps the sequence's items. Expected: the item
+     * entry `env_file:0` with its value, and the tag recorded on `env_file`.
+     */
+    it('!override on a sequence keeps its items', () => {
+      const r = parseYamlLayer('env_file: !override\n  - a.env\n', 'f.yaml', { knownTags: ['!reset', '!override'] });
+      expect(r.entries.map((e) => [e.key, e.value])).toEqual([['env_file:0', 'a.env']]);
+      expect(r.tags.map((t) => [t.key, t.tag])).toEqual([['env_file', '!override']]);
+      expect(r.diagnostics).toEqual([]);
+    });
+
+    /**
+     * Validates that null scalars stay distinguishable from empty strings, which Compose treats
+     * differently (`FOO:` takes the shell value, `FOO: ""` sets an empty one). Expected: `nullKeys` lists
+     * the missing value, `~` and `null` but not `""`, and every entry still has the value `''`.
+     */
+    it('null scalars are listed in nullKeys', () => {
+      const r = parseYamlLayer('a:\nb: ~\nc: ""\nd: null\n', 'f.yaml');
+      expect(r.nullKeys).toEqual(['a', 'b', 'd']);
+      expect(r.entries.map((e) => [e.key, e.value])).toEqual([['a', ''], ['b', ''], ['c', ''], ['d', '']]);
+    });
+
+    /**
+     * Validates that the new fields are always present, so callers need no undefined checks. Expected:
+     * empty lists for a plain file, a broken file and an empty file.
+     */
+    it.each([
+      ['a plain file', 'a: 1\n'],
+      ['a broken file', 'a: "x\n'],
+      ['an empty file', ''],
+    ])('returns empty tags and nullKeys for %s', (_name, text) => {
+      const r = parseYamlLayer(text, 'f.yaml');
+      expect(r.tags).toEqual([]);
+      expect(r.nullKeys).toEqual([]);
+    });
+  });
+
   describe('multiple documents', () => {
     /**
      * Validates the flat view. Expected: entries of all documents in file order, so a later document
