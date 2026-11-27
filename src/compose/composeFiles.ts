@@ -63,7 +63,9 @@ export interface ComposeEnvFile {
  * single-quoted ones are literal (https://docs.docker.com/reference/compose-file/services/#env_file-format).
  * A reference is looked up in `scope` first and then in `parsed`, the values parsed so far: compose-go's
  * `dotenv.expandVariables` calls the lookup function before reading the vars map its parser writes
- * every line into, and a service passes one map through all of its env_files.
+ * every line into, and a service passes one map through all of its env_files. A bare `KEY` line takes
+ * `scope`'s value, as compose-go's parser calls only the lookup function for it, and is left out, with
+ * nothing stored, when `scope` has none.
  * @param text File contents.
  * @param filePath Absolute path of the file.
  * @param scope Variables that win over the parsed lines.
@@ -71,17 +73,26 @@ export interface ComposeEnvFile {
  * @returns The entries and diagnostics. Unset references give no diagnostics.
  */
 export function readComposeEnvFile(text: string, filePath: string, scope: (name: string) => string | undefined, parsed: VarMap = new VarMap()): ComposeEnvFile {
-  const dotenv = parseDotenv(text, filePath);
-  // The parser's info on a bare `KEY` line names python-dotenv rules, which do not apply to Compose.
-  const diagnostics = dotenv.diagnostics.filter((d) => d.severity !== 'info');
-  const entries = dotenv.entries.map((entry) => {
+  const dotenv = parseDotenv(text, filePath, { bareKeys: true });
+  const diagnostics = [...dotenv.diagnostics];
+  const entries: LayerEntry[] = [];
+  for (const entry of dotenv.entries) {
+    if (entry.bare) {
+      const value = scope(entry.name);
+      if (value !== undefined) {
+        parsed.set(entry.name, value);
+        // No reference: the value is read under the entry's own name, which masking already matches.
+        entries.push({ key: entry.name, value, location: entry.location });
+      }
+      continue;
+    }
     const result = entry.expand
       ? interpolate(entry.value, (name) => scope(name) ?? parsed.get(name))
       : { value: entry.value, references: [], unset: [], errors: [] };
     parsed.set(entry.name, result.value);
     diagnostics.push(...result.errors.map((message): Diagnostic => ({ severity: 'error', message, location: entry.location })));
-    return interpolatedEntry(entry.name, result, entry.location);
-  });
+    entries.push(interpolatedEntry(entry.name, result, entry.location));
+  }
   return { entries, diagnostics };
 }
 
@@ -118,7 +129,6 @@ export async function readComposeScope(fs: FileSystem, projectDir: string, envFi
       diagnostics.push({ severity: 'warning', message: `env file not found: ${envFile}` });
     }
   } else {
-    // A bare `KEY` line inherits the shell value in Compose, which the OS layer of the scope already gives.
     diagnostics.push(...readComposeEnvFile(text, envFilePath, (name) => os.get(name), vars).diagnostics);
   }
   vars.merge(os);
