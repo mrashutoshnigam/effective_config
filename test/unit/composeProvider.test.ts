@@ -134,7 +134,7 @@ describe('ComposeProvider project directory', () => {
    */
   it('notes each file read outside the workspace folders once', async () => {
     const files = { ...OTHER, '/other/compose.yaml': 'services:\n  web:\n    env_file: ../shared/x.env\n    image: ${IMAGE_TAG}\n', '/shared/x.env': 'X=1\n' };
-    const outside = ['/other/compose.yaml', '/other/.env', '/shared/x.env'].map((p) => `reads a file outside the workspace: ${path.join(p)}`);
+    const outside = ['/other/.env', '/other/compose.yaml', '/shared/x.env'].map((p) => `reads a file outside the workspace: ${path.join(p)}`);
     const { build: b } = await build(make(files, { files: ['../other/compose.yaml'], workspaceRoots: [DIR] }), { profile: 'web', environment: '.env' });
     const notes = b.diagnostics.filter((d) => d.message.startsWith('reads a file outside the workspace'));
     expect(notes).toEqual(outside.map((message) => ({ severity: 'info', message })));

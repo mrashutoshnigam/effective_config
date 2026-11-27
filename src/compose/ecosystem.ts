@@ -21,7 +21,8 @@ export const COMPOSE_ECOSYSTEM: Ecosystem = {
   /** @inheritdoc */
   createProvider(project) {
     const { files } = readComposeSettings(settingsSource(vscode.Uri.file(project.dir)));
-    return new ComposeProvider({ fs: nodeFileSystem, osEnv: osEnvironment(), files });
+    const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+    return new ComposeProvider({ fs: nodeFileSystem, osEnv: osEnvironment(), files, workspaceRoots });
   },
   /** @inheritdoc */
   ownsFileName: ownsComposeFileName,

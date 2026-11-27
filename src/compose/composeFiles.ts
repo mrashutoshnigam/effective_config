@@ -233,6 +233,57 @@ export async function resolveComposeFiles(
 }
 
 /**
+ * Wraps a file system to record the files it reads.
+ * @param fs File system to read from.
+ * @param read Receives the absolute path of every file read that exists.
+ * @returns The recording file system.
+ */
+export function recordingFileSystem(fs: FileSystem, read: Set<string>): FileSystem {
+  return {
+    /**
+     * Reads a file and records its path when it exists.
+     * @param file Absolute file path.
+     * @returns The contents, or undefined when the file does not exist.
+     */
+    async readFile(file: string): Promise<string | undefined> {
+      const text = await fs.readFile(file);
+      if (text !== undefined) {
+        read.add(file);
+      }
+      return text;
+    },
+    listDir: (dir) => fs.listDir(dir),
+  };
+}
+
+/**
+ * Tells whether a path lies inside a directory or is that directory.
+ * @param dir Absolute directory path.
+ * @param file Absolute path to check.
+ * @returns True when `file` is `dir` or below it; case-insensitive on Windows, as `path.relative` is.
+ */
+function isWithin(dir: string, file: string): boolean {
+  const relative = path.relative(dir, file);
+  return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+/**
+ * Notes the files read outside the workspace. Compose reads them, so the simulation does too, but a
+ * compose file in an untrusted workspace can point anywhere, so the user is told.
+ * @param read Absolute paths of the files read.
+ * @param workspaceRoots Absolute workspace folder paths; undefined skips the check.
+ * @returns One info per path outside every workspace folder, in read order.
+ */
+export function outsideWorkspaceNotes(read: Iterable<string>, workspaceRoots: readonly string[] | undefined): Diagnostic[] {
+  if (workspaceRoots === undefined) {
+    return [];
+  }
+  return [...read]
+    .filter((file) => !workspaceRoots.some((root) => isWithin(root, file)))
+    .map((file): Diagnostic => ({ severity: 'info', message: `reads a file outside the workspace: ${file}` }));
+}
+
+/**
  * Reads the active profiles.
  * @param scope Interpolation scope.
  * @returns The names in `COMPOSE_PROFILES`, comma separated, trimmed, empties dropped.

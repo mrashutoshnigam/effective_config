@@ -12,7 +12,9 @@ import {
   envFileDir,
   expandEnvFileEntries,
   listComposeEnvFiles,
+  outsideWorkspaceNotes,
   readComposeScope,
+  recordingFileSystem,
   resolveComposeFiles,
   resolveFrom,
   type ComposeScope,
@@ -30,6 +32,8 @@ export interface ComposeProviderOptions {
   files: string[];
   /** Platform deciding the `COMPOSE_FILE` separator; defaults to the running one. */
   platform?: NodeJS.Platform;
+  /** Absolute workspace folder paths; files read outside all of them get an info. Undefined skips the check. */
+  workspaceRoots?: readonly string[];
 }
 
 /** Merge label shown in the panel. */
@@ -67,13 +71,14 @@ export class ComposeProvider implements ConfigProvider {
 
   /**
    * Reads the scope of an env file and the compose files it selects.
+   * @param fs File system to read from.
    * @param project Project being read.
    * @param envDir Directory the env file resolves from, see {@link envFileDir}.
    * @param envFile Env file simulating `--env-file`.
    * @returns The scope, the files and their models.
    */
-  private async load(project: ProjectInfo, envDir: string, envFile: string): Promise<LoadedProject> {
-    const { fs, osEnv, files: settingFiles, platform } = this.options;
+  private async load(fs: FileSystem, project: ProjectInfo, envDir: string, envFile: string): Promise<LoadedProject> {
+    const { osEnv, files: settingFiles, platform } = this.options;
     const scope = await readComposeScope(fs, envDir, envFile, osEnv);
     const set = await resolveComposeFiles(fs, project.projectFile, settingFiles, scope.vars, platform);
     const lookup = (name: string): string | undefined => scope.vars.get(name);
@@ -112,7 +117,7 @@ export class ComposeProvider implements ConfigProvider {
     const envDir = envFileDir(project.projectFile, this.options.files);
     const environments = listComposeEnvFiles(await this.options.fs.listDir(envDir));
     const environment = this.defaultEnvFile(envDir, environments);
-    const services = serviceNames((await this.load(project, envDir, environment)).models);
+    const services = serviceNames((await this.load(this.options.fs, project, envDir, environment)).models);
     return {
       profiles: services,
       environments,
@@ -126,9 +131,11 @@ export class ComposeProvider implements ConfigProvider {
 
   /** @inheritdoc */
   async buildLayers(project: ProjectInfo, selection: Selection): Promise<LayerBuild> {
-    const { fs, files: settingFiles } = this.options;
+    const { files: settingFiles, workspaceRoots } = this.options;
+    const read = new Set<string>();
+    const fs = recordingFileSystem(this.options.fs, read);
     const envDir = envFileDir(project.projectFile, settingFiles);
-    const loaded = await this.load(project, envDir, selection.environment);
+    const loaded = await this.load(fs, project, envDir, selection.environment);
     const diagnostics = [...loaded.diagnostics];
     const environments = listComposeEnvFiles(await fs.listDir(envDir));
     const watchPaths = new Set<string>([
@@ -137,8 +144,16 @@ export class ComposeProvider implements ConfigProvider {
       ...environments.map((name) => path.join(envDir, name)),
       loaded.scope.envFilePath,
     ]);
-    /** Builds the result from what has been gathered. */
-    const result = (layers: Layer[]): LayerBuild => ({ layers, diagnostics, watchPaths: [...watchPaths] });
+    /**
+     * Builds the result from what has been gathered.
+     * @param layers The layers built.
+     * @returns The layers, the diagnostics with a note per file read outside the workspace, and the watch paths.
+     */
+    const result = (layers: Layer[]): LayerBuild => ({
+      layers,
+      diagnostics: [...diagnostics, ...outsideWorkspaceNotes(read, workspaceRoots)],
+      watchPaths: [...watchPaths],
+    });
 
     const name = selection.profile ?? serviceNames(loaded.models)[0];
     if (name === undefined) {
@@ -184,7 +199,7 @@ export class ComposeProvider implements ConfigProvider {
     const layers: Layer[] = [];
     for (const [index, ref] of service.envFiles.entries()) {
       watchPaths.add(ref.path);
-      const layer = await this.envFileLayer(ref, index, loaded, envFileScope, parsed, diagnostics);
+      const layer = await this.envFileLayer(fs, ref, index, loaded, envFileScope, parsed, diagnostics);
       if (layer) {
         layers.push(layer);
       }
@@ -196,6 +211,7 @@ export class ComposeProvider implements ConfigProvider {
 
   /**
    * Builds the layer of one `env_file` entry.
+   * @param fs File system to read from.
    * @param ref The entry.
    * @param index Its position in the service's merged `env_file` list.
    * @param loaded The loaded project.
@@ -205,6 +221,7 @@ export class ComposeProvider implements ConfigProvider {
    * @returns The layer, or undefined when the file does not exist.
    */
   private async envFileLayer(
+    fs: FileSystem,
     ref: EnvFileRef,
     index: number,
     loaded: LoadedProject,
@@ -213,7 +230,7 @@ export class ComposeProvider implements ConfigProvider {
     diagnostics: Diagnostic[],
   ): Promise<Layer | undefined> {
     const label = path.relative(loaded.projectDir, ref.path).replace(/\\/g, '/');
-    const text = await this.options.fs.readFile(ref.path);
+    const text = await fs.readFile(ref.path);
     if (text === undefined) {
       diagnostics.push({ severity: ref.required ? 'error' : 'info', message: `env file not found: ${label}`, location: ref.location });
       return undefined;
