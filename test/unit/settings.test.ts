@@ -66,6 +66,7 @@ describe('package.json contribution defaults', () => {
   it('declares every setting the code reads', () => {
     const keys = Object.keys(manifest.contributes.configuration.properties).sort();
     expect(keys).toEqual([
+      'effectiveConfig.compose.files',
       'effectiveConfig.dotnet.jsonLayers',
       'effectiveConfig.maskPatterns',
       'effectiveConfig.node.framework',
