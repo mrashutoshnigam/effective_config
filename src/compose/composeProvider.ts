@@ -45,6 +45,8 @@ interface LoadedProject {
   projectDir: string;
   /** Absolute paths of the files loaded, base first. */
   files: string[];
+  /** Absolute paths of every compose file listed or found, whether it exists or not. */
+  considered: string[];
   /** The parsed files, in the same order. */
   models: ComposeFileModel[];
   /** Problems met reading the scope and the files. */
@@ -82,6 +84,7 @@ export class ComposeProvider implements ConfigProvider {
       scope,
       projectDir: set.projectDir,
       files: set.files,
+      considered: set.considered,
       models,
       diagnostics: [...scope.diagnostics, ...set.diagnostics, ...models.flatMap((m) => m.diagnostics)],
     };
@@ -123,8 +126,7 @@ export class ComposeProvider implements ConfigProvider {
     const environments = listComposeEnvFiles(await fs.listDir(envDir));
     const watchPaths = new Set<string>([
       ...WATCH_GLOBS.filter((g) => !g.includes('*')).map((name) => path.join(project.dir, name)),
-      ...settingFiles.map((f) => (path.isAbsolute(f) ? path.normalize(f) : path.join(path.dirname(project.projectFile), f))),
-      ...loaded.files,
+      ...loaded.considered,
       ...environments.map((name) => path.join(envDir, name)),
       loaded.scope.envFilePath,
     ]);

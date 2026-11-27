@@ -118,6 +118,8 @@ export async function readComposeScope(fs: FileSystem, projectDir: string, envFi
 export interface ComposeFileSet {
   /** Absolute paths in load order, base file first. */
   files: string[];
+  /** Absolute paths of every file listed or found, whether it exists or not; watched for changes. */
+  considered: string[];
   /** Project directory: the directory of the first file, as in Compose. */
   projectDir: string;
   /** Problems met finding the files. */
@@ -154,20 +156,22 @@ export function envFileDir(primaryFile: string, settingFiles: string[]): string 
  * @param fs File system to read from.
  * @param baseDir Directory relative paths start from.
  * @param listed Paths as listed.
- * @returns The existing files and an error per missing one.
+ * @returns The existing files, every listed path and an error per missing one.
  */
-async function existingFiles(fs: FileSystem, baseDir: string, listed: string[]): Promise<{ files: string[]; diagnostics: Diagnostic[] }> {
+async function existingFiles(fs: FileSystem, baseDir: string, listed: string[]): Promise<Omit<ComposeFileSet, 'projectDir'>> {
   const files: string[] = [];
+  const considered: string[] = [];
   const diagnostics: Diagnostic[] = [];
   for (const file of listed) {
     const absolute = resolveFrom(baseDir, file);
+    considered.push(absolute);
     if ((await fs.readFile(absolute)) === undefined) {
       diagnostics.push({ severity: 'error', message: `compose file not found: ${file.replace(/\\/g, '/')}` });
     } else {
       files.push(absolute);
     }
   }
-  return { files, diagnostics };
+  return { files, considered, diagnostics };
 }
 
 /**
@@ -202,7 +206,7 @@ async function defaultFiles(fs: FileSystem, dir: string): Promise<string[]> {
  * @param settingFiles Files from `effectiveConfig.compose.files`, lowest priority first.
  * @param scope Interpolation scope, which may set `COMPOSE_FILE`.
  * @param platform Platform deciding the default separator.
- * @returns The files, the project directory and an error per listed file that does not exist.
+ * @returns The files, every path considered, the project directory and an error per listed file that does not exist.
  */
 export async function resolveComposeFiles(
   fs: FileSystem,
@@ -212,7 +216,7 @@ export async function resolveComposeFiles(
   platform: NodeJS.Platform = process.platform,
 ): Promise<ComposeFileSet> {
   const baseDir = path.dirname(primaryFile);
-  let found: { files: string[]; diagnostics: Diagnostic[] };
+  let found: Omit<ComposeFileSet, 'projectDir'>;
   const composeFile = scope.get('COMPOSE_FILE');
   if (settingFiles.length > 0) {
     found = await existingFiles(fs, baseDir, settingFiles);
@@ -221,10 +225,11 @@ export async function resolveComposeFiles(
     const listed = composeFile.split(separator).map((f) => f.trim()).filter((f) => f !== '');
     found = await existingFiles(fs, baseDir, listed);
   } else {
-    found = { files: await defaultFiles(fs, baseDir), diagnostics: [] };
+    const files = await defaultFiles(fs, baseDir);
+    found = { files, considered: files, diagnostics: [] };
   }
   const projectDir = found.files.length > 0 ? path.dirname(found.files[0]) : baseDir;
-  return { files: found.files, projectDir, diagnostics: found.diagnostics };
+  return { ...found, projectDir };
 }
 
 /**
