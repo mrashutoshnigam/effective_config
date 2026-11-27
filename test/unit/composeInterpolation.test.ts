@@ -121,13 +121,23 @@ describe('interpolate', () => {
   });
 
   /**
-   * Validates recursive defaults, replacements and messages. Expected: the nested expressions expand
-   * and every name read is referenced in first-seen order.
+   * Validates recursive defaults and replacements. Expected: the nested expressions expand and every
+   * name read is referenced in first-seen order.
    */
-  it('interpolates defaults, replacements and messages recursively', () => {
+  it('interpolates defaults and replacements recursively', () => {
     expect(run('${A:-${B:-x}}')).toEqual({ value: 'x', references: ['A', 'B'], unset: [], errors: [] });
     expect(run('${A:+[$B]}', { A: '1', B: '2' })).toEqual({ value: '[2]', references: ['A', 'B'], unset: [], errors: [] });
-    expect(run('${A:?set $B}', { B: 'it' }).errors).toEqual(['required variable A is missing a value: set it']);
+  });
+
+  /**
+   * Validates that a `:?` message is quoted as the author wrote it. compose-go interpolates it, but the
+   * diagnostic banner is not masked, so an expanded message could show a secret. Expected: the message
+   * keeps `${DB_PASSWORD}` literally, the secret never appears, and nothing in the message is read.
+   */
+  it('quotes the :? message as written, without interpolating it', () => {
+    const result = run('${A:?${DB_PASSWORD}}', { DB_PASSWORD: 'hunter2' });
+    expect(result).toEqual({ value: '', references: ['A'], unset: [], errors: ['required variable A is missing a value: ${DB_PASSWORD}'] });
+    expect(JSON.stringify(result)).not.toContain('hunter2');
   });
 
   /**
