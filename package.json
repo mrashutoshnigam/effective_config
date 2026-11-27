@@ -2,7 +2,7 @@
   "name": "effective-config",
   "displayName": "Effective Config Viewer",
   "description": "Shows the merged .NET appsettings, Python .env, Node .env or Docker Compose service configuration for a chosen environment, with the source of every value.",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "publisher": "mrashutoshnigam",
   "icon": "media/icon.png",
   "repository": {
