@@ -36,6 +36,18 @@ describe('parseDotenv', () => {
     }]);
   });
 
+  /**
+   * Validates the opt-in for parsers whose rules give a bare `KEY` a value (Compose takes it from the
+   * environment). Expected: with `bareKeys`, FOO is an entry in source order, marked `bare`, with an
+   * empty literal value at the key's position, and no info; without it, nothing changes.
+   */
+  it('returns a bare KEY as a marked entry when bareKeys is set', () => {
+    const r = parseDotenv('A=1\nFOO\nB=2\n', P, { bareKeys: true });
+    expect(r.entries.map((e) => [e.name, e.bare ?? false])).toEqual([['A', false], ['FOO', true], ['B', false]]);
+    expect(r.entries[1]).toEqual({ name: 'FOO', value: '', expand: false, bare: true, location: { filePath: P, line: 1, column: 0 } });
+    expect(r.diagnostics).toEqual([]);
+  });
+
   it('does not treat # inside quotes as a comment — value keeps it', () => {
     expect(pairs('A="x # y"\nB=\'p # q\'\nC="v" # real comment\n')).toEqual([['A', 'x # y'], ['B', 'p # q'], ['C', 'v']]);
   });
