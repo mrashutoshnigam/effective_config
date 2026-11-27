@@ -54,6 +54,18 @@ describe('NodeProvider.describe', () => {
     expect(await mode({ NODE_ENV: 'production' })).toBe('production');
     expect(await mode({})).toBe('development');
   });
+
+  /**
+   * The shell's mode decides which files load, so it must beat a mode written in `.env`. Expected:
+   * OS NODE_ENV=production wins over `.env` NODE_ENV=staging; `.env` is used when the OS sets none.
+   */
+  it('prefers the OS mode over a mode in .env', async () => {
+    const dotenv = path.join(VITE_DIR, '.env');
+    const fs = { ...nodeFileSystem, readFile: async (p: string) => (p === dotenv ? 'NODE_ENV=staging\n' : nodeFileSystem.readFile(p)) };
+    const mode = async (osEnv: Record<string, string>) => (await make({ fs, osEnv }).describe(project(VITE_DIR))).defaultSelection.environment;
+    expect(await mode({ NODE_ENV: 'production' })).toBe('production');
+    expect(await mode({})).toBe('staging');
+  });
 });
 
 /** Merges the layers of a build and indexes the effective entries by key. */
