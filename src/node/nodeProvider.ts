@@ -39,7 +39,8 @@ class PresetDotenvProvider extends DotenvProviderBase {
       profiles: [],
       environments: this.preset.environments ? [...this.preset.environments] : listDotenvEnvironments(files),
       profileEnvironments: {},
-      defaultSelection: { environment: await this.detectEnvironment(project, files) },
+      // The shell's mode picks the files to load, so the OS ranks above `.env` here.
+      defaultSelection: { environment: await this.detectEnvironment(project, files, [this.osVars()]) },
       mergeLabel: `Simulated — ${this.preset.label} .env order (OS variables win)`,
       envVarSeparator: '__',
       watchGlobs: [...DOTENV_WATCH_GLOBS, 'package.json'],
