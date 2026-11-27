@@ -9,6 +9,7 @@ import {
   OVERRIDE_COMPOSE_FILES,
   PRIMARY_COMPOSE_FILES,
   activeProfiles,
+  envFileDir,
   expandEnvFileEntries,
   listComposeEnvFiles,
   readComposeScope,
@@ -64,12 +65,13 @@ export class ComposeProvider implements ConfigProvider {
   /**
    * Reads the scope of an env file and the compose files it selects.
    * @param project Project being read.
+   * @param envDir Directory the env file resolves from, see {@link envFileDir}.
    * @param envFile Env file simulating `--env-file`.
    * @returns The scope, the files and their models.
    */
-  private async load(project: ProjectInfo, envFile: string): Promise<LoadedProject> {
+  private async load(project: ProjectInfo, envDir: string, envFile: string): Promise<LoadedProject> {
     const { fs, osEnv, files: settingFiles, platform } = this.options;
-    const scope = await readComposeScope(fs, project.dir, envFile, osEnv);
+    const scope = await readComposeScope(fs, envDir, envFile, osEnv);
     const set = await resolveComposeFiles(fs, project.projectFile, settingFiles, scope.vars, platform);
     const lookup = (name: string): string | undefined => scope.vars.get(name);
     const models: ComposeFileModel[] = [];
@@ -97,9 +99,10 @@ export class ComposeProvider implements ConfigProvider {
 
   /** @inheritdoc */
   async describe(project: ProjectInfo): Promise<ProjectDescription> {
-    const environments = listComposeEnvFiles(await this.options.fs.listDir(project.dir));
+    const envDir = envFileDir(project.projectFile, this.options.files);
+    const environments = listComposeEnvFiles(await this.options.fs.listDir(envDir));
     const environment = this.defaultEnvFile(environments);
-    const services = serviceNames((await this.load(project, environment)).models);
+    const services = serviceNames((await this.load(project, envDir, environment)).models);
     return {
       profiles: services,
       environments,
@@ -114,14 +117,15 @@ export class ComposeProvider implements ConfigProvider {
   /** @inheritdoc */
   async buildLayers(project: ProjectInfo, selection: Selection): Promise<LayerBuild> {
     const { fs, files: settingFiles } = this.options;
-    const loaded = await this.load(project, selection.environment);
+    const envDir = envFileDir(project.projectFile, settingFiles);
+    const loaded = await this.load(project, envDir, selection.environment);
     const diagnostics = [...loaded.diagnostics];
-    const environments = listComposeEnvFiles(await fs.listDir(project.dir));
+    const environments = listComposeEnvFiles(await fs.listDir(envDir));
     const watchPaths = new Set<string>([
       ...WATCH_GLOBS.filter((g) => !g.includes('*')).map((name) => path.join(project.dir, name)),
       ...settingFiles.map((f) => (path.isAbsolute(f) ? path.normalize(f) : path.join(path.dirname(project.projectFile), f))),
       ...loaded.files,
-      ...environments.map((name) => path.join(project.dir, name)),
+      ...environments.map((name) => path.join(envDir, name)),
       loaded.scope.envFilePath,
     ]);
     /** Builds the result from what has been gathered. */

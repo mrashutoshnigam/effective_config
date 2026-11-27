@@ -125,13 +125,28 @@ export interface ComposeFileSet {
 }
 
 /**
- * Resolves a listed compose file path.
+ * Resolves a path written in a setting, a variable or a compose file.
  * @param baseDir Directory relative paths start from.
- * @param file Path as listed.
- * @returns The absolute path.
+ * @param file Path as written.
+ * @returns The absolute, normalized path.
  */
-function resolveListed(baseDir: string, file: string): string {
+export function resolveFrom(baseDir: string, file: string): string {
   return path.isAbsolute(file) ? path.normalize(file) : path.join(baseDir, file);
+}
+
+/**
+ * Finds the directory the env file and the env-file dropdown resolve from. compose-go's `WithEnvFiles`
+ * (cli/options.go) looks for the default `.env` in `ProjectOptions.GetWorkingDir()`: the directory of
+ * the first `-f` file, else the working directory. `COMPOSE_FILE` is applied later (`WithConfigFileEnv`),
+ * so it never moves the env file it may itself come from; the primary compose file's directory stands
+ * in for the working directory.
+ * @param primaryFile The project's primary compose file.
+ * @param settingFiles Files from `effectiveConfig.compose.files`, which act like `-f`.
+ * @returns The directory of the first setting file, else the primary file's directory.
+ */
+export function envFileDir(primaryFile: string, settingFiles: string[]): string {
+  const baseDir = path.dirname(primaryFile);
+  return settingFiles.length > 0 ? path.dirname(resolveFrom(baseDir, settingFiles[0])) : baseDir;
 }
 
 /**
@@ -145,7 +160,7 @@ async function existingFiles(fs: FileSystem, baseDir: string, listed: string[]):
   const files: string[] = [];
   const diagnostics: Diagnostic[] = [];
   for (const file of listed) {
-    const absolute = resolveListed(baseDir, file);
+    const absolute = resolveFrom(baseDir, file);
     if ((await fs.readFile(absolute)) === undefined) {
       diagnostics.push({ severity: 'error', message: `compose file not found: ${file.replace(/\\/g, '/')}` });
     } else {
