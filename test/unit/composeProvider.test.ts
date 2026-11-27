@@ -127,6 +127,26 @@ describe('ComposeProvider project directory', () => {
   });
 
   /**
+   * Validates reads outside the workspace, which Compose performs and so does the simulation, but which
+   * the user should notice in an untrusted workspace. Expected: one info per file read outside every
+   * workspace folder (the compose file, its `.env` and an `env_file`), even when read twice, none for
+   * files inside, and none at all when the host gives no workspace folders.
+   */
+  it('notes each file read outside the workspace folders once', async () => {
+    const files = { ...OTHER, '/other/compose.yaml': 'services:\n  web:\n    env_file: ../shared/x.env\n    image: ${IMAGE_TAG}\n', '/shared/x.env': 'X=1\n' };
+    const outside = ['/other/compose.yaml', '/other/.env', '/shared/x.env'].map((p) => `reads a file outside the workspace: ${path.join(p)}`);
+    const { build: b } = await build(make(files, { files: ['../other/compose.yaml'], workspaceRoots: [DIR] }), { profile: 'web', environment: '.env' });
+    const notes = b.diagnostics.filter((d) => d.message.startsWith('reads a file outside the workspace'));
+    expect(notes).toEqual(outside.map((message) => ({ severity: 'info', message })));
+    expect(b.layers.find((l) => l.kind === 'composeEnvFile')?.entries[0]).toMatchObject({ key: 'X', value: '1' });
+
+    const inside = await build(make(files, { files: ['../other/compose.yaml'], workspaceRoots: [DIR, path.join('/other'), path.join('/shared')] }), { profile: 'web', environment: '.env' });
+    expect(inside.build.diagnostics.map((d) => d.message).filter((m) => m.startsWith('reads a file outside'))).toEqual([]);
+    const none = await build(make(files, { files: ['../other/compose.yaml'] }), { profile: 'web', environment: '.env' });
+    expect(none.build.diagnostics.map((d) => d.message).filter((m) => m.startsWith('reads a file outside'))).toEqual([]);
+  });
+
+  /**
    * Validates `COMPOSE_FILE` read from the env file, which cannot move the env file it came from:
    * compose-go locates the default `.env` before applying `COMPOSE_FILE`. Expected: the dropdown and the
    * scope stay in the primary file's folder while the services come from the other folder.
