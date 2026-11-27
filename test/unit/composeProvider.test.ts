@@ -277,6 +277,25 @@ describe('ComposeProvider.buildLayers', () => {
   });
 
   /**
+   * Validates an unresolved value-less override. Compose merges `environment` by name, so the override's
+   * `LOG_LEVEL:` replaces the base value, and with no value in the scope the variable is removed from the
+   * container, even though `env_file` sets it, because `environment` wins over `env_file` when undefined.
+   * Expected: no LOG_LEVEL entry from any layer, and env_file interpolation does not see the removed value.
+   */
+  it('removes a variable an override leaves unresolved, over lower environment and env_file values', async () => {
+    const { build: b, byKey } = await build(
+      make({
+        '/p/compose.override.yaml': 'services:\n  api:\n    environment:\n      LOG_LEVEL:\n',
+        '/p/app.env': 'FROM_FILE=${LOG_LEVEL:-none}\nLOG_LEVEL=warn\n',
+      }),
+      { profile: 'api', environment: '.env' },
+    );
+    expect(byKey.has('LOG_LEVEL')).toBe(false);
+    expect(b.layers.flatMap((l) => l.entries).some((e) => e.key === 'LOG_LEVEL')).toBe(false);
+    expect(byKey.get('FROM_FILE')?.value).toBe('none');
+  });
+
+  /**
    * Validates a selected service the loaded files do not define, e.g. after `COMPOSE_FILE` changed.
    * Expected: one error naming it and no layers.
    */
