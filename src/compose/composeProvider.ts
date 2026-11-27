@@ -91,7 +91,7 @@ export class ComposeProvider implements ConfigProvider {
      * @returns Its value, or undefined when it is unset.
      */
     const lookup = (name: string): string | undefined => scope.vars.get(name);
-    const models = set.files.map((file, i) => readComposeFile(set.texts[i], file, lookup));
+    const models = set.files.map((file, i) => readComposeFile(set.texts[i], file, lookup, set.projectDir));
     return {
       scope,
       projectDir: set.projectDir,

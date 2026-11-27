@@ -12,7 +12,7 @@ const MERGE_TAGS: readonly MergeTag[] = ['!reset', '!override'];
 
 /** One `env_file` entry of a service. */
 export interface EnvFileRef {
-  /** Absolute path, resolved against the declaring compose file's directory. */
+  /** Absolute path, resolved against the project directory (the first loaded compose file's directory). */
   path: string;
   /** False when a missing file is ignored (`required: false`); Compose's default is true. */
   required: boolean;
@@ -118,10 +118,12 @@ class ComposeFileReader {
    * Creates the reader.
    * @param filePath Absolute path of the file.
    * @param lookup Resolves a variable in the interpolation scope.
+   * @param baseDir Directory relative paths resolve from.
    */
   constructor(
     private readonly filePath: string,
     private readonly lookup: (name: string) => string | undefined,
+    private readonly baseDir: string,
   ) {}
 
   /**
@@ -287,7 +289,7 @@ class ComposeFileReader {
    */
   private finish(pending: PendingService): ServiceFragment {
     const { fragment } = pending;
-    const base = path.dirname(this.filePath);
+    const base = this.baseDir;
     const environmentTag = this.tags.get(`services:${fragment.name}:environment`);
     const envFilesTag = this.tags.get(`services:${fragment.name}:env_file`);
     if (fragment.envFiles !== undefined) {
@@ -314,10 +316,20 @@ class ComposeFileReader {
  * @param text File contents.
  * @param filePath Absolute path of the file.
  * @param lookup Resolves a variable in the interpolation scope.
+ * @param baseDir Directory relative paths such as `env_file` resolve from: the project directory, which
+ * is the first loaded file's directory. Docker documents that with several files "paths are evaluated
+ * relative to the base file" (https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/), and
+ * compose-go's `loadYamlModel` (loader/loader.go) calls `paths.ResolveRelativePaths` once, after merging
+ * every file, with `config.WorkingDir`. Defaults to the file's own directory.
  * @returns The services and diagnostics.
  */
-export function readComposeFile(text: string, filePath: string, lookup: (name: string) => string | undefined): ComposeFileModel {
-  return new ComposeFileReader(filePath, lookup).read(text);
+export function readComposeFile(
+  text: string,
+  filePath: string,
+  lookup: (name: string) => string | undefined,
+  baseDir: string = path.dirname(filePath),
+): ComposeFileModel {
+  return new ComposeFileReader(filePath, lookup, baseDir).read(text);
 }
 
 /**
