@@ -100,6 +100,23 @@ describe('ComposeProvider.describe', () => {
     expect(await preselected(path.join(DIR, '.env.prod'))).toBe('.env.prod');
     expect(await preselected('../q/.env.prod')).toBe('.env');
   });
+
+  /**
+   * Validates the case rule of the `COMPOSE_ENV_FILES` match, which follows the file system: Windows
+   * paths ignore case, Linux paths do not. Expected: `.ENV.PROD` preselects the listed `.env.prod` on
+   * win32 only; on linux it falls back to `.env`.
+   */
+  it('matches COMPOSE_ENV_FILES case-insensitively on win32 only', async () => {
+    /**
+     * Describes the fixture with `COMPOSE_ENV_FILES=.ENV.PROD` on a platform.
+     * @param platform The simulated platform.
+     * @returns The preselected env file.
+     */
+    const preselected = async (platform: NodeJS.Platform): Promise<string> =>
+      (await make({}, { osEnv: { COMPOSE_ENV_FILES: '.ENV.PROD' }, platform }).describe(PROJECT)).defaultSelection.environment;
+    expect(await preselected('win32')).toBe('.env.prod');
+    expect(await preselected('linux')).toBe('.env');
+  });
 });
 
 describe('ComposeProvider project directory', () => {
