@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import type { Diagnostic, Layer, LayerEntry } from '../engine/types';
 import type { ConfigProvider, LayerBuild, ProjectDescription, ProjectInfo, Selection } from '../provider';
 import { parseDotenv } from '../sources/dotenv';
-import type { VarMap } from '../sources/dotenvProviderBase';
+import { VarMap } from '../sources/dotenvProviderBase';
 import type { FileSystem } from '../sources/fileSystem';
 import {
   DEFAULT_ENV_FILE,
@@ -144,24 +144,40 @@ export class ComposeProvider implements ConfigProvider {
       });
     }
 
+    const environmentDiagnostics: Diagnostic[] = [];
+    const environmentLayers = service.environmentLayers.map(({ filePath, items }, index): Layer => ({
+      id: `composeEnvironment:${index}`,
+      label: `environment (${path.basename(filePath)})`,
+      kind: 'composeEnvironment',
+      sensitive: false,
+      filePath,
+      entries: this.environmentEntries(items, loaded.scope.vars, environmentDiagnostics),
+    }));
+    // compose-go's `resolveEnvironment` (types/project.go) interpolates env_file values with the project
+    // environment first, then the service's resolved `environment`, and its parser falls back to one vars
+    // map that every env_file of the service is read into, in order.
+    const serviceEnvironment = new VarMap();
+    for (const entry of environmentLayers.flatMap((l) => l.entries)) {
+      serviceEnvironment.set(entry.key, entry.value ?? '');
+    }
+    /**
+     * Looks a variable up for env_file interpolation.
+     * @param name Variable name.
+     * @returns The project scope's value, else the service environment's.
+     */
+    const envFileScope = (name: string): string | undefined => loaded.scope.vars.get(name) ?? serviceEnvironment.get(name);
+    const parsed = new VarMap();
+
     const layers: Layer[] = [];
     for (const [index, ref] of service.envFiles.entries()) {
       watchPaths.add(ref.path);
-      const layer = await this.envFileLayer(ref, index, loaded, diagnostics);
+      const layer = await this.envFileLayer(ref, index, loaded, envFileScope, parsed, diagnostics);
       if (layer) {
         layers.push(layer);
       }
     }
-    for (const [index, { filePath, items }] of service.environmentLayers.entries()) {
-      layers.push({
-        id: `composeEnvironment:${index}`,
-        label: `environment (${path.basename(filePath)})`,
-        kind: 'composeEnvironment',
-        sensitive: false,
-        filePath,
-        entries: this.environmentEntries(items, loaded.scope.vars, diagnostics),
-      });
-    }
+    layers.push(...environmentLayers);
+    diagnostics.push(...environmentDiagnostics);
     return result(layers);
   }
 
@@ -170,21 +186,30 @@ export class ComposeProvider implements ConfigProvider {
    * @param ref The entry.
    * @param index Its position in the service's merged `env_file` list.
    * @param loaded The loaded project.
+   * @param scope Variables that win over the env_files' own values.
+   * @param parsed Values of the service's earlier env_files; this file's values are added to it.
    * @param diagnostics Receives problems met.
    * @returns The layer, or undefined when the file does not exist.
    */
-  private async envFileLayer(ref: EnvFileRef, index: number, loaded: LoadedProject, diagnostics: Diagnostic[]): Promise<Layer | undefined> {
+  private async envFileLayer(
+    ref: EnvFileRef,
+    index: number,
+    loaded: LoadedProject,
+    scope: (name: string) => string | undefined,
+    parsed: VarMap,
+    diagnostics: Diagnostic[],
+  ): Promise<Layer | undefined> {
     const label = path.relative(loaded.projectDir, ref.path).replace(/\\/g, '/');
     const text = await this.options.fs.readFile(ref.path);
     if (text === undefined) {
       diagnostics.push({ severity: ref.required ? 'error' : 'info', message: `env file not found: ${label}`, location: ref.location });
       return undefined;
     }
-    const parsed = parseDotenv(text, ref.path);
+    const dotenv = parseDotenv(text, ref.path);
     // The parser's note on a bare `KEY` line names python-dotenv rules, which do not apply here.
-    diagnostics.push(...parsed.diagnostics.filter((d) => d.severity !== 'info'));
+    diagnostics.push(...dotenv.diagnostics.filter((d) => d.severity !== 'info'));
     const entries: LayerEntry[] = [];
-    for (const { entry, result } of expandEnvFileEntries(parsed.entries, (n) => loaded.scope.vars.get(n))) {
+    for (const { entry, result } of expandEnvFileEntries(dotenv.entries, scope, parsed)) {
       diagnostics.push(...result.errors.map((message): Diagnostic => ({ severity: 'error', message, location: entry.location })));
       entries.push({ key: entry.name, value: result.value, location: entry.location, ...(result.references.length > 0 ? { references: result.references } : {}) });
     }

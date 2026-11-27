@@ -50,19 +50,20 @@ export interface ExpandedEnvEntry {
 /**
  * Interpolates the lines of an env file the way Compose v2 does. Unquoted and double-quoted values are
  * interpolated, single-quoted ones are literal (https://docs.docker.com/reference/compose-file/services/#env_file-format).
- * A reference is looked up in `scope` first and then in the file's earlier lines: compose-go's
- * `dotenv.expandVariables` calls the lookup function before reading the variables parsed so far.
+ * A reference is looked up in `scope` first and then in `parsed`, the values parsed so far: compose-go's
+ * `dotenv.expandVariables` calls the lookup function before reading the vars map its parser writes
+ * every line into, and a service passes one map through all of its env_files.
  * @param entries Parsed lines in source order.
- * @param scope Variables that win over the file's own lines.
+ * @param scope Variables that win over the parsed lines.
+ * @param parsed Values of earlier lines; each line's value is written into it, latest wins.
  * @returns Each line with its interpolation, in source order.
  */
-export function expandEnvFileEntries(entries: DotenvEntry[], scope: (name: string) => string | undefined): ExpandedEnvEntry[] {
-  const own = new VarMap();
+export function expandEnvFileEntries(entries: DotenvEntry[], scope: (name: string) => string | undefined, parsed: VarMap = new VarMap()): ExpandedEnvEntry[] {
   return entries.map((entry) => {
     const result = entry.expand
-      ? interpolate(entry.value, (name) => scope(name) ?? own.get(name))
+      ? interpolate(entry.value, (name) => scope(name) ?? parsed.get(name))
       : { value: entry.value, references: [], unset: [], errors: [] };
-    own.set(entry.name, result.value);
+    parsed.set(entry.name, result.value);
     return { entry, result };
   });
 }
