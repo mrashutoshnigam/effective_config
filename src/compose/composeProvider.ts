@@ -75,17 +75,22 @@ export class ComposeProvider implements ConfigProvider {
    * @param project Project being read.
    * @param envDir Directory the env file resolves from, see {@link envFileDir}.
    * @param envFile Env file simulating `--env-file`.
+   * @param envDirNames Entry names of `envDir`, already listed by the caller.
    * @returns The scope, the files and their models.
    */
-  private async load(fs: FileSystem, project: ProjectInfo, envDir: string, envFile: string): Promise<LoadedProject> {
+  private async load(fs: FileSystem, project: ProjectInfo, envDir: string, envFile: string, envDirNames: string[]): Promise<LoadedProject> {
     const { osEnv, files: settingFiles, platform } = this.options;
     const scope = await readComposeScope(fs, envDir, envFile, osEnv);
-    const set = await resolveComposeFiles(fs, project.projectFile, settingFiles, scope.vars, platform);
+    // Default discovery lists the primary file's directory, which is usually the env file's directory.
+    const listing = path.dirname(project.projectFile) === envDir ? envDirNames : undefined;
+    const set = await resolveComposeFiles(fs, project.projectFile, settingFiles, scope.vars, platform, listing);
+    /**
+     * Looks a variable up in the interpolation scope.
+     * @param name Variable name.
+     * @returns Its value, or undefined when it is unset.
+     */
     const lookup = (name: string): string | undefined => scope.vars.get(name);
-    const models: ComposeFileModel[] = [];
-    for (const file of set.files) {
-      models.push(readComposeFile((await fs.readFile(file)) ?? '', file, lookup));
-    }
+    const models = set.files.map((file, i) => readComposeFile(set.texts[i], file, lookup));
     return {
       scope,
       projectDir: set.projectDir,
@@ -115,9 +120,10 @@ export class ComposeProvider implements ConfigProvider {
   /** @inheritdoc */
   async describe(project: ProjectInfo): Promise<ProjectDescription> {
     const envDir = envFileDir(project.projectFile, this.options.files);
-    const environments = listComposeEnvFiles(await this.options.fs.listDir(envDir));
+    const envDirNames = await this.options.fs.listDir(envDir);
+    const environments = listComposeEnvFiles(envDirNames);
     const environment = this.defaultEnvFile(envDir, environments);
-    const services = serviceNames((await this.load(this.options.fs, project, envDir, environment)).models);
+    const services = serviceNames((await this.load(this.options.fs, project, envDir, environment, envDirNames)).models);
     return {
       profiles: services,
       environments,
@@ -135,9 +141,10 @@ export class ComposeProvider implements ConfigProvider {
     const read = new Set<string>();
     const fs = recordingFileSystem(this.options.fs, read);
     const envDir = envFileDir(project.projectFile, settingFiles);
-    const loaded = await this.load(fs, project, envDir, selection.environment);
+    const envDirNames = await fs.listDir(envDir);
+    const loaded = await this.load(fs, project, envDir, selection.environment, envDirNames);
     const diagnostics = [...loaded.diagnostics];
-    const environments = listComposeEnvFiles(await fs.listDir(envDir));
+    const environments = listComposeEnvFiles(envDirNames);
     const watchPaths = new Set<string>([
       ...WATCH_GLOBS.filter((g) => !g.includes('*')).map((name) => path.join(project.dir, name)),
       ...loaded.considered,

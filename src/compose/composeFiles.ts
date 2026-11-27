@@ -118,6 +118,8 @@ export async function readComposeScope(fs: FileSystem, projectDir: string, envFi
 export interface ComposeFileSet {
   /** Absolute paths in load order, base file first. */
   files: string[];
+  /** Contents of {@link files}, in the same order, so callers need not read them again. */
+  texts: string[];
   /** Absolute paths of every file listed or found, whether it exists or not; watched for changes. */
   considered: string[];
   /** Project directory: the directory of the first file, as in Compose. */
@@ -156,32 +158,34 @@ export function envFileDir(primaryFile: string, settingFiles: string[]): string 
  * @param fs File system to read from.
  * @param baseDir Directory relative paths start from.
  * @param listed Paths as listed.
- * @returns The existing files, every listed path and an error per missing one.
+ * @returns The existing files with their contents, every listed path and an error per missing one.
  */
 async function existingFiles(fs: FileSystem, baseDir: string, listed: string[]): Promise<Omit<ComposeFileSet, 'projectDir'>> {
   const files: string[] = [];
+  const texts: string[] = [];
   const considered: string[] = [];
   const diagnostics: Diagnostic[] = [];
   for (const file of listed) {
     const absolute = resolveFrom(baseDir, file);
     considered.push(absolute);
-    if ((await fs.readFile(absolute)) === undefined) {
+    const text = await fs.readFile(absolute);
+    if (text === undefined) {
       diagnostics.push({ severity: 'error', message: `compose file not found: ${file.replace(/\\/g, '/')}` });
     } else {
       files.push(absolute);
+      texts.push(text);
     }
   }
-  return { files, considered, diagnostics };
+  return { files, texts, considered, diagnostics };
 }
 
 /**
  * Finds the default compose files of a directory, as `docker compose` without `-f` does.
- * @param fs File system to list the directory with.
+ * @param names Entry names of the directory.
  * @param dir Directory to look in.
  * @returns The first primary file present and the override file of its family, when present.
  */
-async function defaultFiles(fs: FileSystem, dir: string): Promise<string[]> {
-  const names = await fs.listDir(dir);
+function defaultFiles(names: string[], dir: string): string[] {
   /**
    * Finds a name in the listing, ignoring case.
    * @param wanted Name to find.
@@ -206,7 +210,9 @@ async function defaultFiles(fs: FileSystem, dir: string): Promise<string[]> {
  * @param settingFiles Files from `effectiveConfig.compose.files`, lowest priority first.
  * @param scope Interpolation scope, which may set `COMPOSE_FILE`.
  * @param platform Platform deciding the default separator.
- * @returns The files, every path considered, the project directory and an error per listed file that does not exist.
+ * @param listing Entry names of the primary file's directory when the caller has already listed it.
+ * @returns The files with their contents, every path considered, the project directory and an error
+ * per listed file that does not exist.
  */
 export async function resolveComposeFiles(
   fs: FileSystem,
@@ -214,6 +220,7 @@ export async function resolveComposeFiles(
   settingFiles: string[],
   scope: VarMap,
   platform: NodeJS.Platform = process.platform,
+  listing?: string[],
 ): Promise<ComposeFileSet> {
   const baseDir = path.dirname(primaryFile);
   let found: Omit<ComposeFileSet, 'projectDir'>;
@@ -225,8 +232,8 @@ export async function resolveComposeFiles(
     const listed = composeFile.split(separator).map((f) => f.trim()).filter((f) => f !== '');
     found = await existingFiles(fs, baseDir, listed);
   } else {
-    const files = await defaultFiles(fs, baseDir);
-    found = { files, considered: files, diagnostics: [] };
+    const defaults = defaultFiles(listing ?? (await fs.listDir(baseDir)), baseDir);
+    found = { ...(await existingFiles(fs, baseDir, defaults)), considered: defaults };
   }
   const projectDir = found.files.length > 0 ? path.dirname(found.files[0]) : baseDir;
   return { ...found, projectDir };

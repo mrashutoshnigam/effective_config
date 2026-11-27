@@ -75,7 +75,7 @@ describe('resolveComposeFiles', () => {
     const fs = memoryFs({ '/p/compose.yaml': '', '/p/compose.override.yml': '' });
     const set = await resolveComposeFiles(fs, at('compose.yaml'), [], new VarMap(), 'linux');
     const files = [at('compose.yaml'), at('compose.override.yml')];
-    expect(set).toEqual({ files, considered: files, projectDir: path.dirname(at('compose.yaml')), diagnostics: [] });
+    expect(set).toEqual({ files, texts: ['', ''], considered: files, projectDir: path.dirname(at('compose.yaml')), diagnostics: [] });
   });
 
   /**
