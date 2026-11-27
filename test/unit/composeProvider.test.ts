@@ -147,6 +147,24 @@ describe('ComposeProvider project directory', () => {
   });
 
   /**
+   * Validates relative paths in a second compose file in another folder. Docker documents that "paths
+   * are evaluated relative to the base file", and compose-go resolves them once, after merging, against
+   * the project working directory. Expected: `env_file: extra.env` in `sub/extra.yaml` reads
+   * `/p/extra.env`, not `/p/sub/extra.env`, and its label is `extra.env`.
+   */
+  it('resolves env_file paths of every compose file from the first file\'s folder', async () => {
+    const files = {
+      '/p/compose.yaml': 'services:\n  api:\n    image: x\n',
+      '/p/sub/extra.yaml': 'services:\n  api:\n    env_file: extra.env\n',
+      '/p/extra.env': 'X=root\n',
+      '/p/sub/extra.env': 'X=sub\n',
+    };
+    const { build: b, byKey } = await build(make(files, { files: ['compose.yaml', 'sub/extra.yaml'] }), { profile: 'api', environment: '.env' });
+    expect(byKey.get('X')?.value).toBe('root');
+    expect(b.layers[0]).toMatchObject({ label: 'extra.env', filePath: path.join(DIR, 'extra.env') });
+  });
+
+  /**
    * Validates `COMPOSE_FILE` read from the env file, which cannot move the env file it came from:
    * compose-go locates the default `.env` before applying `COMPOSE_FILE`. Expected: the dropdown and the
    * scope stay in the primary file's folder while the services come from the other folder.
