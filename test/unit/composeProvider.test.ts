@@ -222,6 +222,34 @@ describe('ComposeProvider.buildLayers', () => {
   });
 
   /**
+   * Validates the lookup order inside env_file values, taken from compose-go's `resolveEnvironment`
+   * (types/project.go) and `dotenv.expandVariables`: the project scope first, then the service's merged
+   * `environment`, then the values of earlier env_files and earlier lines. Expected: `${IMAGE_TAG}` gets
+   * the `.env` value over the service's; `${LOG_LEVEL}` gets the override's `debug` over app.env's
+   * `warn`; `${FIRST}` gets the earlier env_file's value.
+   */
+  it('looks up env_file values in the scope, then environment, then earlier env_files', async () => {
+    const compose = [
+      'services:',
+      '  api:',
+      '    env_file: [app.env, b.env]',
+      '    environment:',
+      '      IMAGE_TAG: svc',
+      '      LOG_LEVEL: info',
+      '',
+    ].join('\n');
+    const files = {
+      '/p/compose.yaml': compose,
+      '/p/app.env': 'LOG_LEVEL=warn\nFIRST=one\n',
+      '/p/b.env': 'T=${IMAGE_TAG}\nL=${LOG_LEVEL}\nF=${FIRST}\n',
+    };
+    const { byKey } = await build(make(files), { profile: 'api', environment: '.env' });
+    expect(byKey.get('T')?.value).toBe('1.2');
+    expect(byKey.get('L')?.value).toBe('debug');
+    expect(byKey.get('F')?.value).toBe('one');
+  });
+
+  /**
    * Validates rebuild triggers. Expected: the compose files, the dropdown's env files and every
    * `env_file` path are watched.
    */
