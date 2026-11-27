@@ -296,4 +296,14 @@ describe('ComposeProvider.buildLayers', () => {
       expect(b.watchPaths).toContain(path.join(DIR, name));
     }
   });
+
+  /**
+   * Validates that a `COMPOSE_FILE` entry that does not exist yet is watched, so creating it rebuilds
+   * the panel. Expected: both listed paths are watched, the missing one included.
+   */
+  it('watches COMPOSE_FILE entries that do not exist', async () => {
+    const { build: b } = await build(make({ '/p/.env': 'COMPOSE_FILE=compose.yaml:sub/later.yaml\n' }), { profile: 'api', environment: '.env' });
+    expect(b.watchPaths).toContain(path.join(DIR, 'compose.yaml'));
+    expect(b.watchPaths).toContain(path.join(DIR, 'sub', 'later.yaml'));
+  });
 });
