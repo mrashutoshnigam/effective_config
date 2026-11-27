@@ -1,0 +1,12 @@
+services:
+  api:
+    image: example/api:${IMAGE_TAG:-latest}
+    env_file: app.env
+    environment:
+      LOG_LEVEL: info
+      VERSION: ${IMAGE_TAG:-latest}
+      DB_PASSWORD: ${DB_PASSWORD}
+      HOME_DIR:
+  worker:
+    image: img:${WORKER_TAG:?set WORKER_TAG}
+    profiles: [jobs]

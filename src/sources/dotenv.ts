@@ -11,6 +11,17 @@ export interface DotenvEntry {
   expand: boolean;
   /** 0-based position of the value's first character (after the opening quote for quoted values). */
   location: SourceLocation;
+  /** True for a bare `KEY` line, returned only with {@link ParseDotenvOptions.bareKeys}; the value is `''`. */
+  bare?: boolean;
+}
+
+/** Options of {@link parseDotenv}. */
+export interface ParseDotenvOptions {
+  /**
+   * Returns a bare `KEY` line as an entry marked `bare`, at the key's position, instead of an info, for
+   * callers whose rules give it a value (Compose takes it from the environment). Defaults to false.
+   */
+  bareKeys?: boolean;
 }
 
 /** Result of parsing a `.env` file. */
@@ -40,11 +51,13 @@ const isBlank = (c: string): boolean => c === ' ' || c === '\t';
  * normalized text.
  * @param text File contents.
  * @param filePath Path recorded in locations.
- * @returns Entries and diagnostics. A bare `KEY` yields an `info`; an unparseable line
+ * @param options Parser options; see {@link ParseDotenvOptions}.
+ * @returns Entries and diagnostics. A bare `KEY` yields an `info` (or a `bare` entry with
+ * `bareKeys`); an unparseable line
  * yields a `warning` and parsing continues; an unterminated quote yields a `warning`, skips
  * only that line and parsing resumes on the next line.
  */
-export function parseDotenv(text: string, filePath: string): DotenvParseResult {
+export function parseDotenv(text: string, filePath: string, options: ParseDotenvOptions = {}): DotenvParseResult {
   const src = stripBom(text).replace(/\r\n?/g, '\n');
   const entries: DotenvEntry[] = [];
   const diagnostics: Diagnostic[] = [];
@@ -100,6 +113,11 @@ export function parseDotenv(text: string, filePath: string): DotenvParseResult {
 
     if (name === '' || (i < eol && src[i] !== '=' && src[i] !== '#')) {
       warn(`Cannot parse line ${lineNo}`, keyStart);
+      pos = eol + 1;
+      continue;
+    }
+    if ((i >= eol || src[i] === '#') && options.bareKeys) {
+      entries.push({ name, value: '', expand: false, bare: true, location: loc(keyStart) });
       pos = eol + 1;
       continue;
     }
