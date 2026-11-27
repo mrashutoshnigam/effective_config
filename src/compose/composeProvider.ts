@@ -14,6 +14,7 @@ import {
   listComposeEnvFiles,
   readComposeScope,
   resolveComposeFiles,
+  resolveFrom,
   type ComposeScope,
 } from './composeFiles';
 import { mergeService, readComposeFile, serviceNames, type ComposeFileModel, type EnvFileRef, type EnvironmentItem } from './composeModel';
@@ -92,19 +93,25 @@ export class ComposeProvider implements ConfigProvider {
 
   /**
    * Picks the env file preselected in the dropdown.
+   * @param envDir Directory the dropdown lists.
    * @param environments The dropdown's env files.
-   * @returns The first `COMPOSE_ENV_FILES` entry (comma separated) when listed, else `.env`.
+   * @returns The first `COMPOSE_ENV_FILES` entry (comma separated) when it names a listed file, written
+   * as a name, a relative path or an absolute path; else `.env`.
    */
-  private defaultEnvFile(environments: string[]): string {
+  private defaultEnvFile(envDir: string, environments: string[]): string {
     const first = (this.options.osEnv.COMPOSE_ENV_FILES ?? '').split(',')[0].trim();
-    return environments.includes(first) ? first : DEFAULT_ENV_FILE;
+    if (first === '') {
+      return DEFAULT_ENV_FILE;
+    }
+    const name = path.relative(envDir, resolveFrom(envDir, first));
+    return environments.includes(name) ? name : DEFAULT_ENV_FILE;
   }
 
   /** @inheritdoc */
   async describe(project: ProjectInfo): Promise<ProjectDescription> {
     const envDir = envFileDir(project.projectFile, this.options.files);
     const environments = listComposeEnvFiles(await this.options.fs.listDir(envDir));
-    const environment = this.defaultEnvFile(environments);
+    const environment = this.defaultEnvFile(envDir, environments);
     const services = serviceNames((await this.load(project, envDir, environment)).models);
     return {
       profiles: services,
